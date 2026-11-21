@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="start_tagline">Videos kürzen, schneiden und zusammenfügen</string>
+    <string name="start_pick_gallery">Video auswählen</string>
+    <string name="start_pick_files">Dateien durchsuchen</string>
+    <string name="start_formats">Öffnet MP4, MOV, MKV, WebM, 3GP und mehr.\nSpeichert als MP4.</string>
+    <string name="loading">Video wird geöffnet…</string>
+
+    <string name="action_close">Schließen</string>
+    <string name="action_undo">Rückgängig</string>
+    <string name="action_redo">Wiederholen</string>
+    <string name="action_export">Exportieren</string>
+    <string name="action_play">Abspielen</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_zoom_in">Timeline vergrößern</string>
+    <string name="action_zoom_out">Timeline verkleinern</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_ok">OK</string>
+
+    <string name="tool_split">Teilen</string>
+    <string name="tool_delete">Löschen</string>
+    <string name="tool_speed">Tempo</string>
+    <string name="tool_sound_on">Ton an</string>
+    <string name="tool_sound_off">Ton aus</string>
+    <string name="tool_rotate">Drehen</string>
+    <string name="tool_add">Hinzufügen</string>
+    <string name="tool_move_left">Nach vorn</string>
+    <string name="tool_move_right">Nach hinten</string>
+    <string name="add_from_gallery">Aus Galerie</string>
+    <string name="add_from_files">Aus Dateien</string>
+    <string name="speed_title">Tempo</string>
+    <string name="timeline_description">Timeline. Ziehen, um durch das Video zu gehen; die weißen Griffe ziehen, um den Clip zu kürzen.</string>
+
+    <string name="close_title">Bearbeitung verwerfen?</string>
+    <string name="close_text">Die Schnitte werden nicht als Projekt aufbewahrt. Exportiere zuerst, wenn du das Ergebnis behalten willst.</string>
+    <string name="close_confirm">Verwerfen</string>
+
+    <string name="export_title">Video exportieren</string>
+    <string name="export_resolution">Auflösung</string>
+    <string name="export_original">Original</string>
+    <string name="export_quality">Qualität</string>
+    <string name="quality_high">Hoch</string>
+    <string name="quality_medium">Mittel</string>
+    <string name="quality_low">Niedrig</string>
+    <string name="export_hevc_hint">Kleinere Datei, läuft aber nicht überall</string>
+    <string name="export_passthrough">Wird ohne Neukodierung gespeichert: schnell und ohne Qualitätsverlust.</string>
+    <string name="export_estimate">%1$d × %2$d · ca. %3$s</string>
+
+    <string name="exporting_title">Video wird exportiert…</string>
+    <string name="exporting_saving">Wird in der Galerie gespeichert…</string>
+    <string name="exporting_hint">Du kannst die App verlassen. Der Export läuft weiter.</string>
+    <string name="done_title">Gespeichert</string>
+    <string name="action_share">Teilen</string>
+    <string name="action_open">Öffnen</string>
+    <string name="action_done">Fertig</string>
+    <string name="failed_title">Export fehlgeschlagen</string>
+
+    <string name="msg_open_failed">Eine oder mehrere Dateien konnten nicht als Video geöffnet werden</string>
+    <string name="msg_playback_error">Dieses Video kann auf diesem Gerät nicht abgespielt werden (%1$s)</string>
+    <string name="msg_storage_permission">Zum Speichern wird die Speicherberechtigung benötigt</string>
+    <string name="msg_no_app">Keine passende App gefunden</string>
+
+    <string name="notif_title">Video wird exportiert</string>
+</resources>

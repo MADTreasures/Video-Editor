@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Video Editor</string>
+
+    <string name="start_tagline">Trim, cut and join videos</string>
+    <string name="start_pick_gallery">Choose video</string>
+    <string name="start_pick_files">Browse files</string>
+    <string name="start_formats">Opens MP4, MOV, MKV, WebM, 3GP and more.\nSaves as MP4.</string>
+    <string name="loading">Opening video…</string>
+
+    <string name="action_close">Close</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_export">Export</string>
+    <string name="action_play">Play</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_zoom_in">Zoom in on timeline</string>
+    <string name="action_zoom_out">Zoom out of timeline</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_ok">OK</string>
+
+    <string name="tool_split">Split</string>
+    <string name="tool_delete">Delete</string>
+    <string name="tool_speed">Speed</string>
+    <string name="tool_sound_on">Sound on</string>
+    <string name="tool_sound_off">Sound off</string>
+    <string name="tool_rotate">Rotate</string>
+    <string name="tool_add">Add</string>
+    <string name="tool_move_left">Earlier</string>
+    <string name="tool_move_right">Later</string>
+    <string name="add_from_gallery">From gallery</string>
+    <string name="add_from_files">From files</string>
+    <string name="speed_title">Speed</string>
+    <string name="timeline_description">Timeline. Drag to move through the video, drag the white handles to trim the clip.</string>
+
+    <string name="close_title">Discard this edit?</string>
+    <string name="close_text">Your cuts are not kept as a project. Export first if you want to keep the result.</string>
+    <string name="close_confirm">Discard</string>
+
+    <string name="export_title">Export video</string>
+    <string name="export_resolution">Resolution</string>
+    <string name="export_original">Original</string>
+    <string name="export_quality">Quality</string>
+    <string name="quality_high">High</string>
+    <string name="quality_medium">Medium</string>
+    <string name="quality_low">Low</string>
+    <string name="export_hevc">H.265 (HEVC)</string>
+    <string name="export_hevc_hint">Smaller file, but does not play everywhere</string>
+    <string name="export_passthrough">Saved without re-encoding: fast and with no loss of quality.</string>
+    <string name="export_estimate">%1$d × %2$d · about %3$s</string>
+
+    <string name="exporting_title">Exporting video…</string>
+    <string name="exporting_saving">Saving to gallery…</string>
+    <string name="exporting_hint">You can leave the app. The export keeps running.</string>
+    <string name="done_title">Saved</string>
+    <string name="action_share">Share</string>
+    <string name="action_open">Open</string>
+    <string name="action_done">Done</string>
+    <string name="failed_title">Export failed</string>
+
+    <string name="msg_open_failed">One or more files could not be opened as video</string>
+    <string name="msg_playback_error">This video cannot be played on this device (%1$s)</string>
+    <string name="msg_storage_permission">Storage permission is needed to save the video</string>
+    <string name="msg_no_app">No app found for this</string>
+
+    <string name="notif_channel">Export</string>
+    <string name="notif_title">Exporting video</string>
+</resources>
