@@ -96,6 +96,9 @@ object ExportController {
     val isBusy: Boolean
         get() = _state.value is ExportState.Running || _state.value is ExportState.Saving
 
+    /** Set by the activity. While false, the result of an export is announced as a notification. */
+    var appVisible = false
+
     fun start(context: Context, project: Project, settings: ExportSettings) {
         if (isBusy || project.isEmpty) return
         val app = context.applicationContext
@@ -161,6 +164,7 @@ object ExportController {
                     // Copying the streams as they are did not work for this file; encode instead.
                     scope.launch {
                         if (_state.value is ExportState.Running) {
+                            _state.value = ExportState.Running(null)
                             run(app, project, settings, plan, passthrough = false)
                         }
                     }

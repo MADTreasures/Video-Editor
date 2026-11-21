@@ -24,6 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -70,16 +71,20 @@ fun VideoEditorApp(vm: EditorViewModel) {
     }
     val pickFiles = { filePicker.launch(arrayOf("video/*")) }
 
-    // Android 9 and older need a permission to save into the shared Movies folder.
-    val storagePermission = rememberLauncherForActivityResult(
+    // Before an export: Android 13+ is asked for notifications (progress and "saved" while the
+    // app is in the background; the export also runs without them), Android 9 and older for
+    // storage, without which nothing can be saved into the shared Movies folder.
+    val exportPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         val settings = pendingExport
         pendingExport = null
-        if (granted && settings != null) {
-            vm.startExport(settings)
-        } else if (!granted) {
-            scope.launch { snackbar.showSnackbar(context.getString(R.string.msg_storage_permission)) }
+        if (settings != null) {
+            if (granted || Build.VERSION.SDK_INT >= 29) {
+                vm.startExport(settings)
+            } else {
+                scope.launch { snackbar.showSnackbar(context.getString(R.string.msg_storage_permission)) }
+            }
         }
     }
 
@@ -95,38 +100,41 @@ fun VideoEditorApp(vm: EditorViewModel) {
     }
 
     VideoEditorTheme {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            if (vm.project.isEmpty) {
-                StartScreen(onPickGallery = pickGallery, onPickFiles = pickFiles, enabled = !vm.isLoading)
-            } else {
-                EditorScreen(
-                    vm = vm,
-                    onPickGallery = pickGallery,
-                    onPickFiles = pickFiles,
-                    onExport = { showExportSettings = true },
-                )
-            }
+        // The Surface also sets the content colour, which icons and text pick up by default.
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Box(Modifier.fillMaxSize()) {
+                if (vm.project.isEmpty) {
+                    StartScreen(onPickGallery = pickGallery, onPickFiles = pickFiles, enabled = !vm.isLoading)
+                } else {
+                    EditorScreen(
+                        vm = vm,
+                        onPickGallery = pickGallery,
+                        onPickFiles = pickFiles,
+                        onExport = { showExportSettings = true },
+                    )
+                }
 
-            if (vm.isLoading) {
-                Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(16.dp))
-                        Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onBackground)
+                if (vm.isLoading) {
+                    Box(
+                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(16.dp))
+                            Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onBackground)
+                        }
                     }
                 }
-            }
 
-            SnackbarHost(
-                snackbar,
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(bottom = 72.dp),
-            )
+                SnackbarHost(
+                    snackbar,
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(bottom = 72.dp),
+                )
+            }
         }
 
         if (showExportSettings && !vm.project.isEmpty && exportState == ExportState.Idle) {
@@ -135,13 +143,17 @@ fun VideoEditorApp(vm: EditorViewModel) {
                 onDismiss = { showExportSettings = false },
                 onExport = { settings ->
                     showExportSettings = false
-                    val needsPermission = Build.VERSION.SDK_INT < 29 &&
-                        ContextCompat.checkSelfPermission(
-                            context, Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                        ) != PackageManager.PERMISSION_GRANTED
-                    if (needsPermission) {
+                    val permission = when {
+                        Build.VERSION.SDK_INT >= 33 -> Manifest.permission.POST_NOTIFICATIONS
+                        Build.VERSION.SDK_INT < 29 -> Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        else -> null
+                    }
+                    val missing = permission != null &&
+                        ContextCompat.checkSelfPermission(context, permission) !=
+                        PackageManager.PERMISSION_GRANTED
+                    if (missing) {
                         pendingExport = settings
-                        storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        exportPermission.launch(permission)
                     } else {
                         vm.startExport(settings)
                     }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 
 private const val CHANNEL_ID = "export"
 private const val NOTIFICATION_ID = 1
+const val RESULT_NOTIFICATION_ID = 2
 
 /** Upper bound for holding the CPU awake, in case the service is never told to stop. */
 private const val WAKE_LOCK_TIMEOUT_MS = 3 * 60 * 60 * 1000L
@@ -71,6 +72,7 @@ class ExportService : Service() {
                     is ExportState.Running -> update(state.progress)
                     ExportState.Saving -> update(100)
                     else -> {
+                        if (!ExportController.appVisible) announce(state)
                         ServiceCompat.stopForeground(this@ExportService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                         stopSelf()
                     }
@@ -97,12 +99,38 @@ class ExportService : Service() {
             .notify(NOTIFICATION_ID, buildNotification(progress))
     }
 
+    /** Tells a user who has left the app how the export ended. */
+    private fun announce(state: ExportState) {
+        val title: String
+        val text: String?
+        when (state) {
+            is ExportState.Done -> {
+                title = getString(R.string.done_title)
+                text = state.location
+            }
+            is ExportState.Failed -> {
+                title = getString(R.string.failed_title)
+                text = null
+            }
+            else -> return
+        }
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_export)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setContentIntent(openApp())
+            .build()
+        getSystemService(NotificationManager::class.java).notify(RESULT_NOTIFICATION_ID, notification)
+    }
+
+    private fun openApp(): PendingIntent = PendingIntent.getActivity(
+        this, 0,
+        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
     private fun buildNotification(progress: Int?): Notification {
-        val open = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_export)
             .setContentTitle(getString(R.string.notif_title))
@@ -110,7 +138,7 @@ class ExportService : Service() {
             .setProgress(100, progress ?: 0, progress == null)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(open)
+            .setContentIntent(openApp())
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()

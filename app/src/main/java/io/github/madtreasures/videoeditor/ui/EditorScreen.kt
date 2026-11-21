@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -73,6 +73,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -81,6 +82,11 @@ import io.github.madtreasures.videoeditor.EditorViewModel
 import io.github.madtreasures.videoeditor.R
 
 private val Speeds = floatArrayOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 3f, 4f)
+
+private val ToolsPadding = 8.dp
+private val ToolSpacing = 2.dp
+private val MinToolWidth = 64.dp
+private val MaxToolWidth = 96.dp
 
 @Composable
 fun EditorScreen(
@@ -306,65 +312,83 @@ private fun ToolsRow(
 ) {
     val project = vm.project
     val index = vm.currentClipIndex
+    val canReorder = project.clips.size > 1
     var showAdd by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        ToolButton(Icons.Rounded.ContentCut, stringResource(R.string.tool_split), vm.canSplit, vm::split)
-        ToolButton(
-            Icons.Rounded.DeleteOutline, stringResource(R.string.tool_delete),
-            project.clips.size > 1, vm::deleteCurrentClip,
-        )
-        ToolButton(
-            Icons.Rounded.Speed,
-            if (project.speed == 1f) stringResource(R.string.tool_speed) else formatSpeed(project.speed),
-            true, onSpeed,
-            highlighted = project.speed != 1f,
-        )
-        ToolButton(
-            if (project.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-            stringResource(if (project.muted) R.string.tool_sound_off else R.string.tool_sound_on),
-            true, vm::toggleMute,
-            highlighted = project.muted,
-        )
-        ToolButton(
-            Icons.Rounded.Rotate90DegreesCw, stringResource(R.string.tool_rotate), true, vm::rotate,
-            highlighted = project.rotation != 0,
-        )
-        Box {
-            ToolButton(Icons.Rounded.Add, stringResource(R.string.tool_add), true, { showAdd = true })
-            DropdownMenu(expanded = showAdd, onDismissRequest = { showAdd = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.add_from_gallery)) },
-                    onClick = {
-                        showAdd = false
-                        vm.pause()
-                        onPickGallery()
-                    },
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Share the width if every tool fits. Otherwise size the tools so that the last one in
+        // view is cut in half, which shows that the row can be scrolled.
+        val count = if (canReorder) 8 else 6
+        val fitting = (maxWidth - ToolsPadding * 2 - ToolSpacing * (count - 1)) / count
+        val toolWidth = if (fitting >= MinToolWidth) {
+            minOf(fitting, MaxToolWidth)
+        } else {
+            (maxWidth - ToolsPadding) / 5.5f - ToolSpacing
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = ToolsPadding, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(ToolSpacing, Alignment.CenterHorizontally),
+        ) {
+            ToolButton(
+                Icons.Rounded.ContentCut, stringResource(R.string.tool_split), toolWidth,
+                enabled = vm.canSplit, onClick = vm::split,
+            )
+            ToolButton(
+                Icons.Rounded.DeleteOutline, stringResource(R.string.tool_delete), toolWidth,
+                enabled = canReorder, onClick = vm::deleteCurrentClip,
+            )
+            ToolButton(
+                Icons.Rounded.Speed,
+                if (project.speed == 1f) stringResource(R.string.tool_speed) else formatSpeed(project.speed),
+                toolWidth,
+                highlighted = project.speed != 1f, onClick = onSpeed,
+            )
+            ToolButton(
+                if (project.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                stringResource(if (project.muted) R.string.tool_sound_off else R.string.tool_sound_on),
+                toolWidth,
+                highlighted = project.muted, onClick = vm::toggleMute,
+            )
+            ToolButton(
+                Icons.Rounded.Rotate90DegreesCw, stringResource(R.string.tool_rotate), toolWidth,
+                highlighted = project.rotation != 0, onClick = vm::rotate,
+            )
+            Box {
+                ToolButton(
+                    Icons.Rounded.Add, stringResource(R.string.tool_add), toolWidth,
+                    onClick = { showAdd = true },
                 )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.add_from_files)) },
-                    onClick = {
-                        showAdd = false
-                        vm.pause()
-                        onPickFiles()
-                    },
+                DropdownMenu(expanded = showAdd, onDismissRequest = { showAdd = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.add_from_gallery)) },
+                        onClick = {
+                            showAdd = false
+                            vm.pause()
+                            onPickGallery()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.add_from_files)) },
+                        onClick = {
+                            showAdd = false
+                            vm.pause()
+                            onPickFiles()
+                        },
+                    )
+                }
+            }
+            if (canReorder) {
+                ToolButton(
+                    Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.tool_move_left), toolWidth,
+                    enabled = index > 0, onClick = { vm.moveCurrentClip(-1) },
+                )
+                ToolButton(
+                    Icons.AutoMirrored.Rounded.ArrowForward, stringResource(R.string.tool_move_right), toolWidth,
+                    enabled = index < project.clips.lastIndex, onClick = { vm.moveCurrentClip(1) },
                 )
             }
-        }
-        if (project.clips.size > 1) {
-            ToolButton(
-                Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.tool_move_left),
-                index > 0, { vm.moveCurrentClip(-1) },
-            )
-            ToolButton(
-                Icons.AutoMirrored.Rounded.ArrowForward, stringResource(R.string.tool_move_right),
-                index < project.clips.lastIndex, { vm.moveCurrentClip(1) },
-            )
         }
     }
 }
@@ -373,9 +397,10 @@ private fun ToolsRow(
 private fun ToolButton(
     icon: ImageVector,
     label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
+    width: Dp,
+    enabled: Boolean = true,
     highlighted: Boolean = false,
+    onClick: () -> Unit,
 ) {
     val color = when {
         !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
@@ -384,18 +409,25 @@ private fun ToolButton(
     }
     Column(
         Modifier
-            .defaultMinSize(minWidth = 68.dp)
+            .width(width)
             .height(64.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 6.dp),
+            .padding(horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         CompositionLocalProvider(LocalContentColor provides color) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
             Spacer(Modifier.height(4.dp))
-            Text(label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Shrinks a little before it would cut off a long label such as "Hinzufügen".
+            Text(
+                label,
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 11.sp, stepSize = 0.5.sp),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

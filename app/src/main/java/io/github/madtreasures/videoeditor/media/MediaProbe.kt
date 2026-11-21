@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -19,6 +20,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 private const val PROBE_TIMEOUT_MS = 20_000L
+private const val TAG = "VideoEditorProbe"
 
 /**
  * Reads what the editor needs to know about a video file. Returns null if the file has no
@@ -50,6 +52,7 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
         }
     } catch (e: Exception) {
         // Fall through to the platform retriever below.
+        Log.w(TAG, "Media3 could not read $uri", e)
     }
 
     var width = video?.width ?: Format.NO_VALUE
@@ -63,7 +66,10 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
         try {
             retriever.setDataSource(context, uri)
             fun meta(key: Int) = retriever.extractMetadata(key)
-            if (meta(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") return@withContext null
+            if (meta(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") {
+                Log.w(TAG, "No video track in $uri")
+                return@withContext null
+            }
             if (durationMs <= 0) {
                 durationMs = meta(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
             }
@@ -76,13 +82,17 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
                 hasAudio = meta(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
             }
         } catch (e: Exception) {
+            Log.w(TAG, "Platform retriever could not read $uri", e)
             return@withContext null
         } finally {
             runCatching { retriever.release() }
         }
     }
 
-    if (durationMs <= 0 || width <= 0 || height <= 0) return@withContext null
+    if (durationMs <= 0 || width <= 0 || height <= 0) {
+        Log.w(TAG, "No usable video in $uri: duration=$durationMs ms, size=${width}x$height")
+        return@withContext null
+    }
 
     val displayWidth = (width * pixelRatio).roundToInt()
     val sideways = rotation % 180 != 0

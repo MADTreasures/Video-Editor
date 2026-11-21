@@ -167,6 +167,8 @@ fun Timeline(
                 val handleRadius = HandleTouchRadius.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    // A finger put down on a rolling timeline just stops it.
+                    val caughtMomentum = momentum?.isActive == true
                     momentum?.cancel()
                     val startProject = currentProject
                     if (startProject.isEmpty) return@awaitEachGesture
@@ -267,6 +269,7 @@ fun Timeline(
                                 }
                             }
                         }
+                        caughtMomentum -> currentOnScrubEnd()
                         else -> {
                             // A tap: glide the playhead to the tapped moment.
                             val target = (startTime + (lastX - centerX) / startPxPerMs)

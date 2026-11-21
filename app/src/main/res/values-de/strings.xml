@@ -24,8 +24,8 @@
     <string name="tool_sound_off">Ton aus</string>
     <string name="tool_rotate">Drehen</string>
     <string name="tool_add">Hinzufügen</string>
-    <string name="tool_move_left">Nach vorn</string>
-    <string name="tool_move_right">Nach hinten</string>
+    <string name="tool_move_left">Früher</string>
+    <string name="tool_move_right">Später</string>
     <string name="add_from_gallery">Aus Galerie</string>
     <string name="add_from_files">Aus Dateien</string>
     <string name="speed_title">Tempo</string>
