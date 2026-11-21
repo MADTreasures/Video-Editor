@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -95,7 +97,18 @@ fun VideoEditorApp(vm: EditorViewModel) {
             } else {
                 context.getString(message.text)
             }
-            launch { snackbar.showSnackbar(text) }
+            launch {
+                val result = if (message.offerFileBrowser) {
+                    snackbar.showSnackbar(
+                        text,
+                        actionLabel = context.getString(R.string.action_browse),
+                        duration = SnackbarDuration.Long,
+                    )
+                } else {
+                    snackbar.showSnackbar(text)
+                }
+                if (result == SnackbarResult.ActionPerformed) pickFiles()
+            }
         }
     }
 

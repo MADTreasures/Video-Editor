@@ -16,6 +16,7 @@
     <string name="action_zoom_out">Timeline verkleinern</string>
     <string name="action_cancel">Abbrechen</string>
     <string name="action_ok">OK</string>
+    <string name="action_browse">Dateien</string>
 
     <string name="tool_split">Teilen</string>
     <string name="tool_delete">Löschen</string>

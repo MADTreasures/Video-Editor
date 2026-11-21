@@ -31,7 +31,17 @@ Video neu kodiert.
 | Zwei Finger auseinander / zusammen | Timeline vergrößern / verkleinern |
 | Weißen Griff ziehen | Anfang oder Ende des Clips unter der Abspielposition kürzen |
 
-Die Werkzeuge unter der Timeline wirken auf den Clip unter der Abspielposition (weiß umrahmt).
+Teilen, Löschen, Früher und Später wirken auf den Clip unter der Abspielposition (weiß
+umrahmt). Tempo, Ton und Drehen gelten für das ganze Video.
+
+## Berechtigungen
+
+- **Benachrichtigungen** (ab Android 13, optional): Die App fragt vor dem ersten Export danach.
+  Damit zeigt sie den Fortschritt an und meldet, wenn das Video fertig ist, auch wenn man
+  inzwischen eine andere App benutzt. Ohne die Erlaubnis läuft der Export genauso.
+- **Speicher** nur bis Android 9, um in den gemeinsamen Ordner `Movies` schreiben zu dürfen.
+- Kein Internetzugriff, kein Zugriff auf Kamera, Mikrofon oder Standort. Die App sieht nur die
+  Videos, die man ihr über die Auswahl, „Öffnen mit“ oder „Teilen“ gibt.
 
 ## Installieren
 

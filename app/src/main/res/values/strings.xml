@@ -18,6 +18,7 @@
     <string name="action_zoom_out">Zoom out of timeline</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_ok">OK</string>
+    <string name="action_browse">Files</string>
 
     <string name="tool_split">Split</string>
     <string name="tool_delete">Delete</string>

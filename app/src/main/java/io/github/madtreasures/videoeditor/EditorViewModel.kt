@@ -34,7 +34,15 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 
-data class UiMessage(@StringRes val text: Int, val arg: String? = null)
+/**
+ * A short notice for the user. With [offerFileBrowser] it comes with a button that opens the
+ * file browser, as another way to get at a video that could not be opened.
+ */
+data class UiMessage(
+    @StringRes val text: Int,
+    val arg: String? = null,
+    val offerFileBrowser: Boolean = false,
+)
 
 private const val MAX_UNDO = 100
 private const val MAX_ZOOM_DP_PER_SECOND = 400f
@@ -143,7 +151,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 if (source != null) sources += source else failed = true
             }
             isLoading = false
-            if (failed) _messages.tryEmit(UiMessage(R.string.msg_open_failed))
+            if (failed) _messages.tryEmit(UiMessage(R.string.msg_open_failed, offerFileBrowser = true))
             if (sources.isEmpty()) return@launch
 
             val appended = project.append(sources) { nextClipId++ }
