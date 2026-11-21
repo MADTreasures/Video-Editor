@@ -54,6 +54,7 @@
     <string name="action_open">Öffnen</string>
     <string name="action_done">Fertig</string>
     <string name="failed_title">Export fehlgeschlagen</string>
+    <string name="failed_text">Das Video konnte nicht exportiert werden. Die Originaldateien sind unverändert.</string>
 
     <string name="msg_open_failed">Eine oder mehrere Dateien konnten nicht als Video geöffnet werden</string>
     <string name="msg_playback_error">Dieses Video kann auf diesem Gerät nicht abgespielt werden (%1$s)</string>

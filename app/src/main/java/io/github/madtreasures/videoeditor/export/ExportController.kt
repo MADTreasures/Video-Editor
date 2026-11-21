@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
@@ -67,6 +68,7 @@ sealed interface ExportState {
 }
 
 const val EXPORT_FOLDER = "VideoEditor"
+private const val TAG = "VideoEditorExport"
 
 /**
  * How long the exporter may go without writing anything before it gives up. Media3's default of
@@ -154,6 +156,7 @@ object ExportController {
             ) {
                 stopTransformer(cancel = false)
                 file.delete()
+                Log.w(TAG, "Export failed (passthrough=$passthrough)", exportException)
                 if (passthrough) {
                     // Copying the streams as they are did not work for this file; encode instead.
                     scope.launch {
@@ -162,11 +165,7 @@ object ExportController {
                         }
                     }
                 } else {
-                    val detail = (exportException.cause?.message ?: exportException.message)
-                        ?.substringBefore(" DebugTrace")
-                    _state.value = ExportState.Failed(
-                        listOfNotNull(exportException.errorCodeName, detail).joinToString("\n"),
-                    )
+                    _state.value = ExportState.Failed(describe(exportException))
                 }
             }
         }
@@ -194,6 +193,16 @@ object ExportController {
                 delay(250)
             }
         }
+    }
+
+    /** Media3's error code plus the message of the underlying cause, for the error dialog. */
+    private fun describe(exception: ExportException): String {
+        var root: Throwable = exception
+        while (true) root = root.cause?.takeIf { it !== root } ?: break
+        val detail = (root.message ?: root.javaClass.simpleName)
+            .substringBefore(" DebugTrace")
+            .trim()
+        return listOf(exception.errorCodeName, detail).filter { it.isNotEmpty() }.joinToString("\n")
     }
 
     private fun stopTransformer(cancel: Boolean) {
@@ -248,9 +257,17 @@ object ExportController {
                         ),
                     )
                 }
-                if (project.speed > 1f) {
-                    // Faster playback would otherwise multiply the frame rate.
-                    add(FrameDropEffect.createDefaultFrameDropEffect(plan.frameRate))
+                val keepEvery = project.speed.toInt()
+                if (keepEvery >= 2) {
+                    // Faster playback would otherwise multiply the frame rate. This keeps every
+                    // n-th frame; Media3's default frame dropper fails with a GL error when a
+                    // sequence moves on to its next clip.
+                    add(
+                        FrameDropEffect.createSimpleFrameDropEffect(
+                            /* expectedFrameRate= */ plan.frameRate * keepEvery,
+                            /* targetFrameRate= */ plan.frameRate,
+                        ),
+                    )
                 }
             }
         }

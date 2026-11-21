@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -158,6 +159,8 @@ fun Timeline(
             .fillMaxWidth()
             .height(TimelineHeight)
             .semantics { contentDescription = description }
+            // Drags that start at the screen edge belong to the timeline, not to "back".
+            .systemGestureExclusion()
             .onSizeChanged { widthPx = it.width }
             .pointerInput(Unit) {
                 val handleWidth = HandleWidth.toPx()

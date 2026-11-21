@@ -241,7 +241,17 @@ fun ExportStatusDialog(
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(stringResource(R.string.failed_title)) },
-                text = { Text(state.reason) },
+                text = {
+                    Column {
+                        Text(stringResource(R.string.failed_text))
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            state.reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
                 },

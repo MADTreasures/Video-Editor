@@ -57,6 +57,7 @@
     <string name="action_open">Open</string>
     <string name="action_done">Done</string>
     <string name="failed_title">Export failed</string>
+    <string name="failed_text">The video could not be exported. The original files are unchanged.</string>
 
     <string name="msg_open_failed">One or more files could not be opened as video</string>
     <string name="msg_playback_error">This video cannot be played on this device (%1$s)</string>

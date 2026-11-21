@@ -3,6 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val appVersion = "1.0"
+
+// Names the APKs VideoEditor-<version>-<build type>.apk
+base {
+    archivesName = "VideoEditor-$appVersion"
+}
+
 android {
     namespace = "io.github.madtreasures.videoeditor"
     compileSdk {
@@ -14,7 +21,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = appVersion
     }
 
     signingConfigs {

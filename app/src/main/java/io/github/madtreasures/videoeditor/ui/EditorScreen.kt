@@ -266,26 +266,27 @@ private fun TransportRow(
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp)) {
+    Row(
+        Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             // Reading the position here keeps the per-frame updates local to this text.
             text = formatTime(positionMs()) + " / " + formatTime(durationMs),
             style = TextStyle(fontSize = 13.sp, fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
+            overflow = TextOverflow.Clip,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
         )
-        FilledIconButton(
-            onClick = onTogglePlay,
-            modifier = Modifier.align(Alignment.Center).size(48.dp),
-        ) {
+        FilledIconButton(onClick = onTogglePlay, modifier = Modifier.size(48.dp)) {
             Icon(
                 if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
                 modifier = Modifier.size(28.dp),
             )
         }
-        Row(Modifier.align(Alignment.CenterEnd)) {
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
             IconButton(onClick = onZoomOut) {
                 Icon(Icons.Rounded.ZoomOut, contentDescription = stringResource(R.string.action_zoom_out))
             }
