@@ -147,12 +147,14 @@ object ExportController {
         .filter { it !in triedCodecs && it.mime in encodableCodecs }
         .minByOrNull { if (it == VideoCodec.H264) 0 else 1 + plan.container.videoCodecs.indexOf(it) }
 
+    /**
+     * True if the video encoder itself failed, however Media3 classified it: an encoder that
+     * dies while starting surfaces as an init error, an encoding error, or (when MediaCodec has
+     * already released it) as a failed state check.
+     */
     private fun isVideoEncoderFailure(e: ExportException): Boolean {
         val codec = e.codecInfo
-        val encoderCode = e.errorCode == ExportException.ERROR_CODE_ENCODER_INIT_FAILED ||
-            e.errorCode == ExportException.ERROR_CODE_ENCODING_FAILED ||
-            e.errorCode == ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED
-        return encoderCode && codec != null && codec.isVideo && !codec.isDecoder
+        return codec != null && codec.isVideo && !codec.isDecoder
     }
 
     fun cancel() {

@@ -5,6 +5,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Metadata
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.CodecSpecificDataUtil
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.muxer.BufferInfo
 import androidx.media3.muxer.Muxer
@@ -60,7 +61,9 @@ class MatroskaMuxer private constructor(path: String) : Muxer {
                 format.channelCount,
             )
             MimeTypes.AUDIO_OPUS -> {
-                val head = init.firstOrNull { CodecData.isOpusHead(it) }
+                // Android's encoder wraps the header in its own structure; Media3 unwraps it.
+                val head = runCatching { CodecSpecificDataUtil.getOpusInitializationData(format) }.getOrNull()
+                    ?.takeIf { CodecData.isOpusHead(it) }
                     ?: CodecData.opusHead(format.channelCount, OPUS_DEFAULT_PRE_SKIP, format.sampleRate)
                 writer.addAudioTrack(
                     "A_OPUS",

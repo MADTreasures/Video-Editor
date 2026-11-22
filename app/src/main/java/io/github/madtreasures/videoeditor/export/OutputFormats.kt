@@ -3,8 +3,10 @@ package io.github.madtreasures.videoeditor.export
 import android.media.MediaCodecList
 import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.Metadata
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.CodecSpecificDataUtil
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.muxer.Muxer
 import androidx.media3.muxer.MuxerException
@@ -42,11 +44,24 @@ fun muxerFactoryFor(container: Container): Muxer.Factory? = when (container) {
 }
 
 /**
- * Passes everything through to [muxer] except metadata: Media3 always hands over rotation and
- * time stamps, which Media3's own WebM and Ogg muxers refuse with an exception.
+ * Adapts Media3's own WebM and Ogg muxers to what the exporter hands them:
+ * - metadata (rotation, time stamps), which they refuse with an exception, is dropped;
+ * - tracks without a language, which the WebM muxer cannot write, are marked "undetermined";
+ * - Android's Opus encoder wraps its identification header in a private structure
+ *   ("AOPUSHDR"), which the WebM muxer would copy into the file as it is; it gets the plain
+ *   header instead.
  */
 @OptIn(UnstableApi::class)
 private class WithoutMetadata(private val muxer: Muxer) : Muxer by muxer {
+    override fun addTrack(format: Format): Int {
+        val builder = format.buildUpon()
+        if (format.language == null) builder.setLanguage("und")
+        if (format.sampleMimeType == MimeTypes.AUDIO_OPUS && format.initializationData.isNotEmpty()) {
+            builder.setInitializationData(listOf(CodecSpecificDataUtil.getOpusInitializationData(format)))
+        }
+        return muxer.addTrack(builder.build())
+    }
+
     override fun addMetadataEntry(metadataEntry: Metadata.Entry) = Unit
 }
 
