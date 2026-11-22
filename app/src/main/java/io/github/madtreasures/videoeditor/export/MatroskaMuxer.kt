@@ -17,26 +17,37 @@ import java.nio.ByteBuffer
 
 /**
  * Lets Media3's exporter write Matroska (.mkv) files with H.264, VP9 or VP8 pictures and AAC or
- * Opus sound. Media3 itself only writes WebM, which allows no H.264 and no AAC.
+ * Opus sound, and WebM files (the Matroska subset for the web: VP9 or VP8 with Opus). Media3's
+ * own WebM muxer is not used: it writes a broken Opus track (a floating-point bit depth of -1,
+ * and Android's private wrapper around the Opus header), which players refuse.
  *
  * Matroska has no rotation flag, so the exporter must hand over pictures the right way up;
  * rotation metadata is ignored here.
  */
 @OptIn(UnstableApi::class)
-class MatroskaMuxer private constructor(path: String) : Muxer {
+class MatroskaMuxer private constructor(path: String, docType: String) : Muxer {
 
-    class Factory : Muxer.Factory {
-        override fun create(path: String): Muxer = MatroskaMuxer(path)
+    /** @param webm true for a WebM file, which only takes VP9, VP8 and Opus. */
+    class Factory(private val webm: Boolean = false) : Muxer.Factory {
+        override fun create(path: String): Muxer = MatroskaMuxer(path, if (webm) "webm" else "matroska")
 
         override fun getSupportedSampleMimeTypes(trackType: Int): ImmutableList<String> = when (trackType) {
-            C.TRACK_TYPE_VIDEO -> ImmutableList.of(MimeTypes.VIDEO_H264, MimeTypes.VIDEO_VP9, MimeTypes.VIDEO_VP8)
-            C.TRACK_TYPE_AUDIO -> ImmutableList.of(MimeTypes.AUDIO_AAC, MimeTypes.AUDIO_OPUS)
+            C.TRACK_TYPE_VIDEO -> if (webm) {
+                ImmutableList.of(MimeTypes.VIDEO_VP9, MimeTypes.VIDEO_VP8)
+            } else {
+                ImmutableList.of(MimeTypes.VIDEO_H264, MimeTypes.VIDEO_VP9, MimeTypes.VIDEO_VP8)
+            }
+            C.TRACK_TYPE_AUDIO -> if (webm) {
+                ImmutableList.of(MimeTypes.AUDIO_OPUS)
+            } else {
+                ImmutableList.of(MimeTypes.AUDIO_AAC, MimeTypes.AUDIO_OPUS)
+            }
             else -> ImmutableList.of()
         }
     }
 
     private val writer = try {
-        MatroskaWriter(RandomAccessFile(path, "rw").apply { setLength(0) })
+        MatroskaWriter(RandomAccessFile(path, "rw").apply { setLength(0) }, docType)
     } catch (e: IOException) {
         throw MuxerException("Cannot open $path", e)
     }

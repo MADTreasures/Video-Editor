@@ -11,8 +11,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.muxer.Muxer
 import androidx.media3.muxer.MuxerException
 import androidx.media3.muxer.OggMuxer
-import androidx.media3.muxer.SeekableMuxerOutput
-import androidx.media3.muxer.WebmMuxer
 import com.google.common.collect.ImmutableList
 import io.github.madtreasures.videoeditor.model.ALL_CODECS
 import io.github.madtreasures.videoeditor.model.Container
@@ -38,18 +36,16 @@ val encodableCodecs: Set<String> by lazy {
 @OptIn(UnstableApi::class)
 fun muxerFactoryFor(container: Container): Muxer.Factory? = when (container) {
     Container.MKV -> MatroskaMuxer.Factory()
-    Container.WEBM -> WebmFactory
+    Container.WEBM -> MatroskaMuxer.Factory(webm = true)
     Container.OGG -> OggFactory
     else -> null
 }
 
 /**
- * Adapts Media3's own WebM and Ogg muxers to what the exporter hands them:
- * - metadata (rotation, time stamps), which they refuse with an exception, is dropped;
- * - tracks without a language, which the WebM muxer cannot write, are marked "undetermined";
- * - Android's Opus encoder wraps its identification header in a private structure
- *   ("AOPUSHDR"), which the WebM muxer would copy into the file as it is; it gets the plain
- *   header instead.
+ * Adapts Media3's own Ogg muxer to what the exporter hands it:
+ * - metadata (rotation, time stamps), which it refuses with an exception, is dropped;
+ * - tracks get a language ("undetermined") and Android's Opus encoder's private header wrapper
+ *   ("AOPUSHDR") is replaced by the plain Opus header, as Media3's muxers expect.
  */
 @OptIn(UnstableApi::class)
 private class WithoutMetadata(private val muxer: Muxer) : Muxer by muxer {
@@ -63,21 +59,6 @@ private class WithoutMetadata(private val muxer: Muxer) : Muxer by muxer {
     }
 
     override fun addMetadataEntry(metadataEntry: Metadata.Entry) = Unit
-}
-
-@OptIn(UnstableApi::class)
-private object WebmFactory : Muxer.Factory {
-    override fun create(path: String): Muxer = try {
-        WithoutMetadata(WebmMuxer.Builder(SeekableMuxerOutput.of(path)).build())
-    } catch (e: FileNotFoundException) {
-        throw MuxerException("Cannot open $path", e)
-    }
-
-    override fun getSupportedSampleMimeTypes(trackType: Int): ImmutableList<String> = when (trackType) {
-        C.TRACK_TYPE_VIDEO -> ImmutableList.of(MimeTypes.VIDEO_VP9, MimeTypes.VIDEO_VP8)
-        C.TRACK_TYPE_AUDIO -> ImmutableList.of(MimeTypes.AUDIO_OPUS, MimeTypes.AUDIO_VORBIS)
-        else -> ImmutableList.of()
-    }
 }
 
 @OptIn(UnstableApi::class)

@@ -30,7 +30,9 @@ Internet-Berechtigung; alles passiert auf dem Gerät.
   | M4A | – | AAC | nur den Ton speichern |
   | OGG | – | Opus | nur den Ton speichern |
 
-  Angeboten werden nur die Codecs, die das Gerät kodieren kann. Videos landen in
+  Angeboten werden nur die Codecs, die das Gerät kodieren kann. Scheitert der Encoder eines
+  Geräts trotzdem, speichert die App automatisch mit dem nächsten passenden Codec (am Ende
+  H.264) und sagt das im Ergebnis. Videos landen in
   `Movies/VideoEditor`, reine Tondateien in `Music/VideoEditor`. Dazu kommen drei Auflösungen
   (1080p, 720p, 480p) und drei Qualitätsstufen. Der Export läuft weiter, wenn man die App
   verlässt, und meldet sich per Benachrichtigung.
@@ -99,7 +101,7 @@ eine ältere installieren lässt. Mehr dazu in [`keystore/README.md`](keystore/R
 | --- | --- |
 | `model/` | Projekt, Clips, Schnittoperationen und Exportplanung; reines Kotlin, mit Unit-Tests |
 | `media/` | Videodateien auslesen, Vorschaubilder für die Timeline |
-| `export/` | Export mit Media3 Transformer, Speichern in der Galerie, Vordergrunddienst |
+| `export/` | Export mit Media3 Transformer, eigener Matroska-Schreiber für MKV und WebM, Speichern in der Galerie, Vordergrunddienst |
 | `ui/` | Oberfläche in Jetpack Compose: Startbildschirm, Editor, Timeline, Dialoge |
 | `EditorViewModel.kt` | Zustand des Editors, Steuerung des Vorschau-Players, Rückgängig-Verlauf |
 

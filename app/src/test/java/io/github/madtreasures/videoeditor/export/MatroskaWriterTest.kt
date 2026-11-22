@@ -158,4 +158,33 @@ class MatroskaWriterTest {
         assertArrayEquals(byteArrayOf(0x40, 0x7F), MatroskaWriter.sizeBytes(127))
         assertArrayEquals(byteArrayOf(0x01, 0, 0, 0, 0, 0, 0x30, 0x39), MatroskaWriter.fixedSize(12345))
     }
+
+    @Test
+    fun webm_isMarkedAsWebm_andOpusGetsItsDelayAndPreRoll() {
+        val file = folder.newFile("test.webm")
+        val writer = MatroskaWriter(RandomAccessFile(file, "rw"), docType = "webm")
+        val head = CodecData.opusHead(channels = 2, preSkip = 312, inputSampleRate = 48_000)
+        val audio = writer.addAudioTrack("A_OPUS", head, 48_000, 2, codecDelayNs = 6_500_000, seekPreRollNs = 80_000_000)
+        for (i in 0 until 50) writer.writeSample(audio, i * 20_000L, true, ByteArray(100))
+        writer.close()
+
+        val data = file.readBytes()
+        val top = children(data, 0, data.size)
+        val header = children(data, top[0].start, top[0].start + top[0].size)
+        val docType = header.first { it.id == MatroskaWriter.ID_DOC_TYPE }
+        assertEquals("webm", String(data, docType.start, docType.size))
+        assertEquals(2L, uintOf(data, header.first { it.id == MatroskaWriter.ID_DOC_TYPE_VERSION }))
+
+        val segment = children(data, top[1].start, top[1].start + top[1].size)
+        val tracks = segment.first { it.id == MatroskaWriter.ID_TRACKS }
+        val entry = children(data, tracks.start, tracks.start + tracks.size).single()
+        val fields = children(data, entry.start, entry.start + entry.size)
+        assertEquals(6_500_000L, uintOf(data, fields.first { it.id == MatroskaWriter.ID_CODEC_DELAY }))
+        assertEquals(80_000_000L, uintOf(data, fields.first { it.id == MatroskaWriter.ID_SEEK_PRE_ROLL }))
+        val private = fields.first { it.id == MatroskaWriter.ID_CODEC_PRIVATE }
+        assertArrayEquals(head, data.copyOfRange(private.start, private.start + private.size))
+        // Without a picture, every cluster is listed for seeking; 1 s of sound fits in one.
+        val cues = segment.first { it.id == MatroskaWriter.ID_CUES }
+        assertEquals(1, children(data, cues.start, cues.start + cues.size).size)
+    }
 }
