@@ -81,6 +81,17 @@ data class Project(
         return ClipPosition(clips.lastIndex, clips.last().durationMs)
     }
 
+    /**
+     * Project time at which the clip at [index] shows the moment [sourceMs] of its file. A
+     * moment the clip does not contain is replaced by the nearest one it does, so the result
+     * always lies inside that clip.
+     */
+    fun timeOfSource(index: Int, sourceMs: Long): Long {
+        val clip = clips.getOrNull(index) ?: return 0
+        val lastInside = (clip.endMs - 1).coerceAtLeast(clip.startMs)
+        return clipStartMs(index) + (sourceMs.coerceIn(clip.startMs, lastInside) - clip.startMs)
+    }
+
     fun canSplitAt(timeMs: Long): Boolean {
         if (clips.isEmpty()) return false
         val (index, offset) = locate(timeMs)

@@ -189,4 +189,28 @@ class ProjectTest {
         assertEquals(1_200_000, medium.videoBitrate)
         assertEquals(700_000, low.videoBitrate)
     }
+
+    @Test
+    fun timeOfSource_followsAFrameThroughATrim() {
+        // Two clips; the playhead shows second 4 of the second clip's file.
+        val p = project(2000, 10_000)
+        assertEquals(6000, p.timeOfSource(1, 4000))
+
+        // Trimming that clip's start moves everything in it earlier on the project's time axis.
+        val startTrimmed = p.trim(1, Edge.START, 3000)
+        assertEquals(3000, startTrimmed.timeOfSource(1, 4000))
+        // Trimming its end leaves the frame where it was.
+        assertEquals(6000, p.trim(1, Edge.END, 5000).timeOfSource(1, 4000))
+    }
+
+    @Test
+    fun timeOfSource_frameThatWasCutAway_goesToTheNearestOneLeft() {
+        val p = project(2000, 10_000)
+        // Start trimmed past the frame: the clip's new first frame.
+        assertEquals(2000, p.trim(1, Edge.START, 6000).timeOfSource(1, 4000))
+        // End trimmed before the frame: the clip's new last millisecond, still inside the clip.
+        val endTrimmed = p.trim(1, Edge.END, 3000)
+        assertEquals(4999, endTrimmed.timeOfSource(1, 4000))
+        assertEquals(1, endTrimmed.locate(endTrimmed.timeOfSource(1, 4000)).index)
+    }
 }

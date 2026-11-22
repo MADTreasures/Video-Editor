@@ -30,7 +30,7 @@
     <string name="add_from_gallery">Aus Galerie</string>
     <string name="add_from_files">Aus Dateien</string>
     <string name="speed_title">Tempo</string>
-    <string name="timeline_description">Timeline. Ziehen, um durch das Video zu gehen; die weißen Griffe ziehen, um den Clip zu kürzen.</string>
+    <string name="timeline_description">Timeline. Den Abspielkopf ziehen, um durch das Video zu gehen; die weißen Griffe ziehen, um den Clip zu kürzen.</string>
 
     <string name="close_title">Bearbeitung verwerfen?</string>
     <string name="close_text">Die Schnitte werden nicht als Projekt aufbewahrt. Exportiere zuerst, wenn du das Ergebnis behalten willst.</string>

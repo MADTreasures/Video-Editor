@@ -110,6 +110,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     /** The clip list the player's playlist was last built from. */
     private var syncedClips: List<Clip>? = null
     private var projectBeforeTrim: Project? = null
+
+    /** The moment of the trimmed clip's file that the playhead showed when the trim began. */
+    private var playheadSourceMs = 0L
+
+    /** Room the timeline has for the clips, in dp; see [initZoom]. */
+    private var fitWidthDp = 300f
     private var scrubbing = false
 
     private val playerListener = object : Player.Listener {
@@ -246,6 +252,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * While a trim handle is dragged the player shows the clip's whole source file, so the frame
      * under the handle can be shown even where it lies outside the clip's current range.
+     *
+     * The playhead is not part of the trim: it stays on the frame it was on. Only if that frame
+     * is cut away does it move, to the nearest frame the clip still has.
      */
     fun trimStart(index: Int, edge: Edge) {
         val clip = project.clips.getOrNull(index) ?: return
@@ -253,6 +262,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         scrubEnd()
         player.pause()
         projectBeforeTrim = project
+        playheadSourceMs = clip.startMs + (positionMs - project.clipStartMs(index)).coerceIn(0, clip.durationMs)
         activeTrim = index to edge
         syncedClips = null
         player.setMediaItem(MediaItem.fromUri(clip.source.uri), trimPreviewMs(clip, edge))
@@ -265,21 +275,19 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val updated = project.trim(index, edge, valueMs)
         if (updated === project) return
         project = updated
+        positionMs = updated.timeOfSource(index, playheadSourceMs)
         player.seekTo(trimPreviewMs(updated.clips[index], edge))
     }
 
     fun trimEnd() {
-        val (index, edge) = activeTrim ?: return
+        val (index, _) = activeTrim ?: return
         val before = projectBeforeTrim
         activeTrim = null
         projectBeforeTrim = null
         player.setScrubbingModeEnabled(false)
         if (before != null && before != project) pushUndo(before)
-        val clipStart = project.clipStartMs(index)
-        positionMs = when (edge) {
-            Edge.START -> clipStart
-            Edge.END -> max(clipStart, clipStart + project.clips[index].durationMs - FRAME_MS)
-        }
+        positionMs = project.timeOfSource(index, playheadSourceMs)
+        // Back from the frame under the handle to the frame under the playhead.
         syncPlayer()
     }
 
@@ -288,20 +296,26 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         Edge.END -> max(clip.startMs, clip.endMs - FRAME_MS)
     }
 
-    fun initZoom(timelineWidthDp: Float) {
+    /**
+     * Tells the view model how many dp the clips have to spread out in. The first time for a
+     * project, the zoom is chosen so that all of it fits.
+     */
+    fun initZoom(usableWidthDp: Float) {
+        fitWidthDp = usableWidthDp
         if (zoom != null || project.isEmpty) return
-        val seconds = project.durationMs / 1000f
-        zoom = (timelineWidthDp * 0.85f / seconds).coerceIn(minZoom(), INITIAL_MAX_ZOOM_DP_PER_SECOND)
+        zoom = min(fitZoom(), INITIAL_MAX_ZOOM_DP_PER_SECOND)
     }
 
     fun zoomBy(factor: Float) {
         val current = zoom ?: return
-        zoom = (current * factor).coerceIn(minZoom(), MAX_ZOOM_DP_PER_SECOND)
+        // Zooming out stops where the whole project fits. A project that was shortened since
+        // may already be smaller than that; then it is left as it is.
+        val lowest = min(current, min(fitZoom(), INITIAL_MAX_ZOOM_DP_PER_SECOND))
+        zoom = (current * factor).coerceIn(lowest, max(lowest, MAX_ZOOM_DP_PER_SECOND))
     }
 
-    /** Never let the whole project shrink below about a third of a phone screen. */
-    private fun minZoom(): Float =
-        min(120f / max(0.1f, project.durationMs / 1000f), INITIAL_MAX_ZOOM_DP_PER_SECOND)
+    /** The zoom at which the project is exactly as wide as the timeline has room for. */
+    private fun fitZoom(): Float = fitWidthDp / max(0.1f, project.durationMs / 1000f)
 
     // ---- Edits ----
 

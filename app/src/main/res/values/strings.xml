@@ -32,7 +32,7 @@
     <string name="add_from_gallery">From gallery</string>
     <string name="add_from_files">From files</string>
     <string name="speed_title">Speed</string>
-    <string name="timeline_description">Timeline. Drag to move through the video, drag the white handles to trim the clip.</string>
+    <string name="timeline_description">Timeline. Drag the playhead to move through the video, drag the white handles to trim the clip.</string>
 
     <string name="close_title">Discard this edit?</string>
     <string name="close_text">Your cuts are not kept as a project. Export first if you want to keep the result.</string>

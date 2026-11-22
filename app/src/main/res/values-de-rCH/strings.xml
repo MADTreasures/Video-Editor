@@ -3,5 +3,5 @@
 <resources>
     <string name="action_close">Schliessen</string>
     <string name="action_zoom_in">Timeline vergrössern</string>
-    <string name="timeline_description">Timeline. Ziehen, um durch das Video zu gehen; die weissen Griffe ziehen, um den Clip zu kürzen.</string>
+    <string name="timeline_description">Timeline. Den Abspielkopf ziehen, um durch das Video zu gehen; die weissen Griffe ziehen, um den Clip zu kürzen.</string>
 </resources>

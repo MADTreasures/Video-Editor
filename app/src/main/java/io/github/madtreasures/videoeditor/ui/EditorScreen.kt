@@ -154,8 +154,8 @@ fun EditorScreen(
             onZoomOut = { vm.zoomBy(1 / 1.6f) },
         )
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val widthDp = maxWidth.value
-            LaunchedEffect(widthDp, project.isEmpty) { vm.initZoom(widthDp) }
+            val usableDp = (maxWidth - TimelineSidePadding * 2).value
+            LaunchedEffect(usableDp, project.isEmpty) { vm.initZoom(usableDp) }
             Timeline(
                 project = project,
                 currentIndex = vm.currentClipIndex,

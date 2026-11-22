@@ -24,15 +24,25 @@ Video neu kodiert.
 
 ## Bedienung der Timeline
 
+Der Filmstreifen und die Zeitskala stehen still. Bewegt wird immer nur das, was man anfasst;
+es leuchtet beim Berühren auf.
+
 | Geste | Wirkung |
 | --- | --- |
-| Ziehen | durch das Video bewegen |
-| Tippen | Abspielposition dorthin setzen |
+| Abspielkopf ziehen (weißer Balken, am Punkt oder an der Linie) | nur der Abspielkopf folgt dem Finger; Vorschau und Zeitanzeige laufen mit |
+| Auf der Zeitskala ziehen | der Abspielkopf kommt unter den Finger und folgt ihm |
+| Tippen | Abspielkopf dorthin setzen |
+| Linken oder rechten Griff ziehen | Anfang oder Ende des Clips kürzen; nur diese Kante bewegt sich, die andere Kante und die Bilder bleiben stehen |
+| Filmstreifen ziehen | Ausschnitt verschieben, sobald das Projekt nach dem Vergrößern breiter ist als die Anzeige |
 | Zwei Finger auseinander / zusammen | Timeline vergrößern / verkleinern |
-| Weißen Griff ziehen | Anfang oder Ende des Clips unter der Abspielposition kürzen |
 
-Teilen, Löschen, Früher und Später wirken auf den Clip unter der Abspielposition (weiß
-umrahmt). Tempo, Ton und Drehen gelten für das ganze Video.
+Die Griffe sitzen am Clip unter dem Abspielkopf (weiß umrahmt). Beim Ziehen eines Griffs zeigt
+die Vorschau das Bild an der Schnittkante, danach wieder das Bild unter dem Abspielkopf. Der
+Abspielkopf bleibt beim Kürzen auf seinem Bild stehen; nur wenn dieses Bild weggeschnitten
+wird, rückt er an die neue Kante.
+
+Teilen, Löschen, Früher und Später wirken auf den Clip unter dem Abspielkopf. Tempo, Ton und
+Drehen gelten für das ganze Video.
 
 ## Berechtigungen
 
