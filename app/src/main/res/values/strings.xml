@@ -88,4 +88,5 @@ Saves as MP4, MOV, MKV, WebM or 3GP, or just the sound.</string>
     <string name="export_estimate_audio">%1$d kbit/s · about %2$s</string>
     <string name="export_no_sound">There is no sound to save: the video has none, or it is switched off.</string>
     <string name="export_audio_dropped">Without sound: this device cannot encode sound for %1$s.</string>
+    <string name="done_codec_fallback">This device could not encode %1$s, so the video was saved with %2$s.</string>
 </resources>

@@ -85,4 +85,5 @@ Speichert als MP4, MOV, MKV, WebM, 3GP oder nur den Ton.</string>
     <string name="export_estimate_audio">%1$d kbit/s · ca. %2$s</string>
     <string name="export_no_sound">Es gibt keinen Ton zum Speichern: Das Video hat keinen, oder er ist ausgeschaltet.</string>
     <string name="export_audio_dropped">Ohne Ton: Dieses Gerät kann den Ton für %1$s nicht erzeugen.</string>
+    <string name="done_codec_fallback">Dieses Gerät konnte nicht als %1$s kodieren; das Video wurde deshalb mit %2$s gespeichert.</string>
 </resources>

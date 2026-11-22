@@ -39,6 +39,7 @@ import io.github.madtreasures.videoeditor.model.Container
 import io.github.madtreasures.videoeditor.model.ExportPlan
 import io.github.madtreasures.videoeditor.model.ExportSettings
 import io.github.madtreasures.videoeditor.model.Project
+import io.github.madtreasures.videoeditor.model.VideoCodec
 import io.github.madtreasures.videoeditor.model.audioPlacements
 import io.github.madtreasures.videoeditor.model.hasLaneAudio
 import io.github.madtreasures.videoeditor.model.planExport
@@ -69,7 +70,18 @@ sealed interface ExportState {
 
     data object Saving : ExportState
 
-    data class Done(val uri: Uri, val location: String, val sizeBytes: Long, val mimeType: String) : ExportState
+    /**
+     * @param fallbackFrom the codec that was chosen but could not be used on this device, if the
+     *   video was saved with another one instead.
+     */
+    data class Done(
+        val uri: Uri,
+        val location: String,
+        val sizeBytes: Long,
+        val mimeType: String,
+        val videoCodec: VideoCodec? = null,
+        val fallbackFrom: VideoCodec? = null,
+    ) : ExportState
 
     data class Failed(val reason: String) : ExportState
 }
@@ -120,7 +132,27 @@ object ExportController {
             _state.value = ExportState.Failed("Nothing to export")
             return
         }
+        triedCodecs.clear()
         run(app, project, settings, plan, passthrough = plan.passthrough)
+    }
+
+    /** Video codecs that failed to start in the current export; see [nextCodec]. */
+    private val triedCodecs = ArrayList<VideoCodec>()
+
+    /**
+     * The codec to try when the video encoder for the current one fails, or null: the next one
+     * the file type takes and this device has, ending with the most widely supported.
+     */
+    private fun nextCodec(plan: ExportPlan): VideoCodec? = plan.container.videoCodecs
+        .filter { it !in triedCodecs && it.mime in encodableCodecs }
+        .minByOrNull { if (it == VideoCodec.H264) 0 else 1 + plan.container.videoCodecs.indexOf(it) }
+
+    private fun isVideoEncoderFailure(e: ExportException): Boolean {
+        val codec = e.codecInfo
+        val encoderCode = e.errorCode == ExportException.ERROR_CODE_ENCODER_INIT_FAILED ||
+            e.errorCode == ExportException.ERROR_CODE_ENCODING_FAILED ||
+            e.errorCode == ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED
+        return encoderCode && codec != null && codec.isVideo && !codec.isDecoder
     }
 
     fun cancel() {
@@ -156,7 +188,11 @@ object ExportController {
                         withContext(Dispatchers.IO) { patchFileType(file, plan.container) }
                         val size = file.length()
                         val (uri, location) = saveToGallery(app, file, plan.container)
-                        ExportState.Done(uri, location, size, plan.container.mimeType)
+                        ExportState.Done(
+                            uri, location, size, plan.container.mimeType,
+                            videoCodec = plan.videoCodec,
+                            fallbackFrom = triedCodecs.firstOrNull()?.takeIf { it != plan.videoCodec },
+                        )
                     } catch (e: Exception) {
                         ExportState.Failed(e.message ?: e.javaClass.simpleName)
                     } finally {
@@ -173,16 +209,36 @@ object ExportController {
                 stopTransformer(cancel = false)
                 file.delete()
                 Log.w(TAG, "Export failed (passthrough=$passthrough)", exportException)
-                if (passthrough) {
-                    // Copying the streams as they are did not work for this file; encode instead.
-                    scope.launch {
-                        if (_state.value is ExportState.Running) {
-                            _state.value = ExportState.Running(null)
-                            run(app, project, settings, plan, passthrough = false)
+                val failedCodec = plan.videoCodec
+                val fallback = if (!passthrough && failedCodec != null && isVideoEncoderFailure(exportException)) {
+                    triedCodecs += failedCodec
+                    nextCodec(plan)
+                } else {
+                    null
+                }
+                when {
+                    passthrough -> {
+                        // Copying the streams as they are did not work for this file; encode instead.
+                        scope.launch {
+                            if (_state.value is ExportState.Running) {
+                                _state.value = ExportState.Running(null)
+                                run(app, project, settings, plan, passthrough = false)
+                            }
                         }
                     }
-                } else {
-                    _state.value = ExportState.Failed(describe(exportException))
+                    fallback != null -> {
+                        // This device's encoder for the chosen codec does not work; use another
+                        // one the file type takes.
+                        Log.w(TAG, "${failedCodec?.label} encoder failed, trying ${fallback.label}")
+                        val retry = planExport(project, settings.copy(videoCodec = fallback), encodableCodecs)
+                        scope.launch {
+                            if (_state.value is ExportState.Running) {
+                                _state.value = ExportState.Running(null)
+                                run(app, project, settings.copy(videoCodec = fallback), retry, passthrough = false)
+                            }
+                        }
+                    }
+                    else -> _state.value = ExportState.Failed(describe(exportException))
                 }
             }
         }

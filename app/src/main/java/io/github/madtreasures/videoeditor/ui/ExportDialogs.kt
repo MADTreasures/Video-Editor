@@ -292,6 +292,16 @@ fun ExportStatusDialog(
                             Formatter.formatShortFileSize(context, state.sizeBytes),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        val usedCodec = state.videoCodec
+                        val failedCodec = state.fallbackFrom
+                        if (failedCodec != null && usedCodec != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                stringResource(R.string.done_codec_fallback, failedCodec.label, usedCodec.label),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
                 confirmButton = {
