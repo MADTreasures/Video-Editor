@@ -21,6 +21,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.madtreasures.videoeditor.export.ExportController
 import io.github.madtreasures.videoeditor.export.ExportState
+import io.github.madtreasures.videoeditor.export.encodableCodecs
 import io.github.madtreasures.videoeditor.media.ThumbnailLoader
 import io.github.madtreasures.videoeditor.media.Waveforms
 import io.github.madtreasures.videoeditor.media.probeAudio
@@ -42,6 +43,7 @@ import io.github.madtreasures.videoeditor.model.trimAudio
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -180,6 +182,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         player.addListener(playerListener)
+        // Asking the platform for its encoders takes a moment; do it before the export dialog needs it.
+        viewModelScope.launch(Dispatchers.Default) { encodableCodecs }
     }
 
     private fun updatePlaying() {
