@@ -3,6 +3,7 @@ package io.github.madtreasures.videoeditor.export
 import android.media.MediaCodecList
 import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.Metadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.muxer.Muxer
@@ -40,10 +41,19 @@ fun muxerFactoryFor(container: Container): Muxer.Factory? = when (container) {
     else -> null
 }
 
+/**
+ * Passes everything through to [muxer] except metadata: Media3 always hands over rotation and
+ * time stamps, which Media3's own WebM and Ogg muxers refuse with an exception.
+ */
+@OptIn(UnstableApi::class)
+private class WithoutMetadata(private val muxer: Muxer) : Muxer by muxer {
+    override fun addMetadataEntry(metadataEntry: Metadata.Entry) = Unit
+}
+
 @OptIn(UnstableApi::class)
 private object WebmFactory : Muxer.Factory {
     override fun create(path: String): Muxer = try {
-        WebmMuxer.Builder(SeekableMuxerOutput.of(path)).build()
+        WithoutMetadata(WebmMuxer.Builder(SeekableMuxerOutput.of(path)).build())
     } catch (e: FileNotFoundException) {
         throw MuxerException("Cannot open $path", e)
     }
@@ -58,7 +68,7 @@ private object WebmFactory : Muxer.Factory {
 @OptIn(UnstableApi::class)
 private object OggFactory : Muxer.Factory {
     override fun create(path: String): Muxer = try {
-        OggMuxer.Builder(FileOutputStream(path).channel).build()
+        WithoutMetadata(OggMuxer.Builder(FileOutputStream(path).channel).build())
     } catch (e: FileNotFoundException) {
         throw MuxerException("Cannot open $path", e)
     }
