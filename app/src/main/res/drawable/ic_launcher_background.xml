@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Warm gradient from amber at the top left through coral to violet at the bottom right. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="315"
+        android:centerColor="@color/logo_middle"
+        android:endColor="@color/logo_end"
+        android:startColor="@color/logo_start"
+        android:type="linear" />
+</shape>

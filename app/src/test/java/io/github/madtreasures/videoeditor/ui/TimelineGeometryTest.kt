@@ -104,4 +104,42 @@ class TimelineGeometryTest {
         // Exactly filling the view is not scrollable either.
         assertFalse(canScroll(6080, 720f, 0.1f, 56f))
     }
+
+    private val withLane = metrics.copy(laneTop = 200f, laneBottom = 260f)
+    private val onLane = 230f
+    private val lane = listOf(LaneBox(1, 100f, 300f), LaneBox(2, 400f, 600f))
+
+    private fun hitLane(x: Float, selected: Long? = null, playheadX: Float = 350f) =
+        hitTimeline(x, onLane, clipLeft, clipRight, playheadX, withLane, lane, selected)
+
+    @Test
+    fun audioLane_clipsAreHitAndOnlyTheSelectedOneHasHandles() {
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_CLIP, 1), hitLane(150f))
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_CLIP, 2), hitLane(500f))
+        // Unselected: the area beside a clip is empty lane, not a handle.
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_EMPTY), hitLane(80f))
+        // Selected: handles around its edges, the body still moves it.
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_START_HANDLE, 1), hitLane(80f, selected = 1))
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_START_HANDLE, 1), hitLane(115f, selected = 1))
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_END_HANDLE, 1), hitLane(320f, selected = 1))
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_CLIP, 1), hitLane(200f, selected = 1))
+    }
+
+    @Test
+    fun audioLane_playheadBetweenClips_andVideoTrackUnaffected() {
+        assertEquals(TimelineHit(TimelineTarget.PLAYHEAD), hitLane(360f))
+        assertEquals(TimelineHit(TimelineTarget.AUDIO_EMPTY), hitLane(700f))
+        // The video track above works as before.
+        assertEquals(
+            TimelineHit(TimelineTarget.START_HANDLE),
+            hitTimeline(184f, onTrack, clipLeft, clipRight, 350f, withLane, lane, 1),
+        )
+    }
+
+    @Test
+    fun snap_pullsOnlyWithinReach() {
+        assertEquals(5000L, snap(5080, listOf(0, 5000, 9000), reachMs = 100f))
+        assertEquals(5150L, snap(5150, listOf(0, 5000, 9000), reachMs = 100f))
+        assertEquals(42L, snap(42, emptyList(), reachMs = 100f))
+    }
 }

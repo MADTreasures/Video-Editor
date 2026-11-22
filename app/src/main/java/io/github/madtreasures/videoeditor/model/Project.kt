@@ -14,6 +14,12 @@ data class VideoSource(
     val hasAudio: Boolean,
     /** Average bits per second of the whole file, or 0 if unknown. */
     val bitrate: Int = 0,
+    /** Codec of the video track, as a MIME type such as "video/avc"; empty if unknown. */
+    val videoMime: String = "",
+    /** Codec of the audio track; empty if unknown or there is none. */
+    val audioMime: String = "",
+    /** Rotation the file asks players to apply; [width] and [height] already include it. */
+    val rotationDegrees: Int = 0,
 ) {
     val aspectRatio: Float get() = if (height > 0) width.toFloat() / height else 16f / 9f
 }
@@ -42,6 +48,8 @@ data class Project(
     val rotation: Int = 0,
     val muted: Boolean = false,
     val speed: Float = 1f,
+    /** Audio files placed on the lane under the video; see AudioLane.kt. */
+    val audio: List<AudioClip> = emptyList(),
 ) {
     val durationMs: Long = clips.sumOf { it.durationMs }
 
@@ -50,6 +58,7 @@ data class Project(
     /** Length of the exported video, with the speed setting applied. */
     val outputDurationMs: Long get() = (durationMs / speed).toLong()
 
+    /** True if the video's own sound is part of the result. */
     val hasAudio: Boolean get() = !muted && clips.any { it.source.hasAudio }
 
     /** Aspect ratio of the output frame: the first clip's, with the rotation applied. */

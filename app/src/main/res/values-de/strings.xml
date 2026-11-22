@@ -3,7 +3,8 @@
     <string name="start_tagline">Videos kürzen, schneiden und zusammenfügen</string>
     <string name="start_pick_gallery">Video auswählen</string>
     <string name="start_pick_files">Dateien durchsuchen</string>
-    <string name="start_formats">Öffnet MP4, MOV, MKV, WebM, 3GP und mehr.\nSpeichert als MP4.</string>
+    <string name="start_formats">Öffnet MP4, MOV, MKV, WebM, 3GP, AVI und mehr.
+Speichert als MP4, MOV, MKV, WebM, 3GP oder nur den Ton.</string>
     <string name="loading">Video wird geöffnet…</string>
 
     <string name="action_close">Schließen</string>
@@ -43,7 +44,6 @@
     <string name="quality_high">Hoch</string>
     <string name="quality_medium">Mittel</string>
     <string name="quality_low">Niedrig</string>
-    <string name="export_hevc_hint">Kleinere Datei, läuft aber nicht überall</string>
     <string name="export_passthrough">Wird ohne Neukodierung gespeichert: schnell und ohne Qualitätsverlust.</string>
     <string name="export_estimate">%1$d × %2$d · ca. %3$s</string>
 
@@ -63,4 +63,26 @@
     <string name="msg_no_app">Keine passende App gefunden</string>
 
     <string name="notif_title">Video wird exportiert</string>
+    <string name="tool_audio">Audio</string>
+    <string name="tool_done">Fertig</string>
+    <string name="tool_volume">Lautstärke %1$d %%</string>
+    <string name="volume_title">Lautstärke</string>
+    <string name="volume_hint">Gilt für dieses Audiostück. Den Originalton des Videos schaltest du mit „Ton an/aus“.</string>
+    <string name="lane_add_audio">＋ Tippen, um Musik oder Audio hinzuzufügen</string>
+    <string name="msg_audio_failed">Eine oder mehrere Dateien konnten nicht als Audio geöffnet werden</string>
+    <string name="msg_audio_no_room">Auf der Tonspur ist an dieser Stelle kein Platz. Verschiebe oder kürze das Audio dort zuerst.</string>
+    <string name="export_format">Format</string>
+    <string name="export_audio_only">Nur Ton</string>
+    <string name="export_codec">Video-Codec</string>
+    <string name="format_mp4">Läuft überall: Handy, PC, Web.</string>
+    <string name="format_mov">Für Apple-Geräte, iMovie und Final Cut.</string>
+    <string name="format_mkv">Für PC-Player wie VLC. Nicht jede Galerie-App spielt MKV ab.</string>
+    <string name="format_webm">Fürs Web. Das Umwandeln dauert länger.</string>
+    <string name="format_3gp">Kleine Dateien für ältere Handys.</string>
+    <string name="format_m4a">Nur der Ton, als AAC.</string>
+    <string name="format_ogg">Nur der Ton, als Opus.</string>
+    <string name="export_passthrough_picture">Das Bild wird ohne Neukodierung übernommen, der Ton wird umgewandelt.</string>
+    <string name="export_estimate_audio">%1$d kbit/s · ca. %2$s</string>
+    <string name="export_no_sound">Es gibt keinen Ton zum Speichern: Das Video hat keinen, oder er ist ausgeschaltet.</string>
+    <string name="export_audio_dropped">Ohne Ton: Dieses Gerät kann den Ton für %1$s nicht erzeugen.</string>
 </resources>

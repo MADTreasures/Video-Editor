@@ -16,7 +16,11 @@ class ProjectTest {
         height: Int = 1080,
         audio: Boolean = true,
         bitrate: Int = 0,
-    ) = VideoSource("content://test/$durationMs", "v$durationMs.mp4", durationMs, width, height, 30f, audio, bitrate)
+    ) = VideoSource(
+        "content://test/$durationMs", "v$durationMs.mp4", durationMs, width, height, 30f, audio, bitrate,
+        videoMime = "video/avc",
+        audioMime = if (audio) "audio/mp4a-latm" else "",
+    )
 
     private fun project(vararg durations: Long) =
         Project().append(durations.map { source(it) }, newId)
@@ -139,7 +143,7 @@ class ProjectTest {
         assertFalse(planExport(base.copy(speed = 2f), ExportSettings()).passthrough)
         assertFalse(planExport(base, ExportSettings(resolution = Resolution.P720)).passthrough)
         assertFalse(planExport(base, ExportSettings(quality = Quality.MEDIUM)).passthrough)
-        assertFalse(planExport(base, ExportSettings(hevc = true)).passthrough)
+        assertFalse(planExport(base, ExportSettings(videoCodec = VideoCodec.H265)).passthrough)
     }
 
     @Test
@@ -170,7 +174,7 @@ class ProjectTest {
         val p = project(10_000).splitAt(5000, newId)
         val high = planExport(p, ExportSettings())
         val low = planExport(p, ExportSettings(quality = Quality.LOW))
-        val hevc = planExport(p, ExportSettings(hevc = true))
+        val hevc = planExport(p, ExportSettings(videoCodec = VideoCodec.H265))
         assertEquals((1920L * 1080 * 30 * 0.14f).toLong().toInt(), high.videoBitrate)
         assertTrue(low.videoBitrate < high.videoBitrate)
         assertTrue(hevc.videoBitrate < high.videoBitrate)

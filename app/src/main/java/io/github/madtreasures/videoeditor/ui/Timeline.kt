@@ -28,15 +28,17 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerId
@@ -53,6 +55,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -60,12 +64,13 @@ import androidx.compose.ui.unit.sp
 import io.github.madtreasures.videoeditor.R
 import io.github.madtreasures.videoeditor.media.ThumbKey
 import io.github.madtreasures.videoeditor.media.ThumbnailLoader
+import io.github.madtreasures.videoeditor.media.WAVEFORM_BUCKET_MS
+import io.github.madtreasures.videoeditor.media.Waveforms
+import io.github.madtreasures.videoeditor.model.AudioPlacement
 import io.github.madtreasures.videoeditor.model.Clip
 import io.github.madtreasures.videoeditor.model.Edge
 import io.github.madtreasures.videoeditor.model.Project
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
+import io.github.madtreasures.videoeditor.model.audioPlacements
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -73,16 +78,24 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 /** Free space beside the clips, so the handles of the first and last clip can be reached. */
 val TimelineSidePadding = 32.dp
 
-// From top to bottom: time labels, the lane with the playhead's knob, the clips.
+// From top to bottom: time labels, the lane with the playhead's knob, the clips, the audio lane.
 private val LabelsHeight = 16.dp
 private val KnobLaneHeight = 22.dp
 private val TrackTop = LabelsHeight + KnobLaneHeight
 private val TrackHeight = 56.dp
-val TimelineHeight = TrackTop + TrackHeight + 18.dp
+private val LaneTop = TrackTop + TrackHeight + 8.dp
+private val LaneHeight = 40.dp
+val TimelineHeight = LaneTop + LaneHeight + 12.dp
+
+/** How close an audio edge has to come to the playhead or a cut to snap onto it. */
+private val SnapReach = 10.dp
 
 private val HandleWidth = 16.dp
 private val HandleReachOut = 18.dp
@@ -110,6 +123,9 @@ private class TrimSession(val index: Int, val edge: Edge, val startMs: Long, val
  *   other edge and the pictures stay where they are;
  * - the strip itself, which scrolls if the project is longer than the view.
  *
+ * Under the clips runs the audio lane: a tap selects an audio clip, dragging it moves it, and the
+ * selected one has handles of its own to trim it. On an empty lane a tap adds audio.
+ *
  * A tap puts the playhead there, two fingers zoom.
  */
 @Composable
@@ -125,6 +141,15 @@ fun Timeline(
     onTrimStart: (Int, Edge) -> Unit,
     onTrim: (Int, Edge, Long) -> Unit,
     onTrimEnd: () -> Unit,
+    waveforms: Waveforms,
+    selectedAudioId: Long?,
+    addAudioLabel: String,
+    onSelectAudio: (Long?) -> Unit,
+    onAddAudio: () -> Unit,
+    onAudioEditStart: (Long) -> Unit,
+    onAudioMove: (Long, Long) -> Unit,
+    onAudioTrim: (Long, Edge, Long) -> Unit,
+    onAudioEditEnd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -142,6 +167,13 @@ fun Timeline(
     val currentOnTrimStart by rememberUpdatedState(onTrimStart)
     val currentOnTrim by rememberUpdatedState(onTrim)
     val currentOnTrimEnd by rememberUpdatedState(onTrimEnd)
+    val currentSelectedAudio by rememberUpdatedState(selectedAudioId)
+    val currentOnSelectAudio by rememberUpdatedState(onSelectAudio)
+    val currentOnAddAudio by rememberUpdatedState(onAddAudio)
+    val currentOnAudioEditStart by rememberUpdatedState(onAudioEditStart)
+    val currentOnAudioMove by rememberUpdatedState(onAudioMove)
+    val currentOnAudioTrim by rememberUpdatedState(onAudioTrim)
+    val currentOnAudioEditEnd by rememberUpdatedState(onAudioEditEnd)
 
     var widthPx by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -155,6 +187,8 @@ fun Timeline(
     var trim by remember { mutableStateOf<TrimSession?>(null) }
     /** What the finger is holding right now, for highlighting it. */
     var held by remember { mutableStateOf<TimelineTarget?>(null) }
+    /** The audio clip the finger is holding, if it holds one. */
+    var heldAudio by remember { mutableStateOf<Long?>(null) }
     var touching by remember { mutableStateOf(false) }
     /** True while the view glides back after a trim left it outside its scroll range. */
     var settling by remember { mutableStateOf(false) }
@@ -244,6 +278,11 @@ fun Timeline(
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val gripColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val heldColor = MaterialTheme.colorScheme.primary
+    val laneFill = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)
+    val waveColor = MaterialTheme.colorScheme.tertiary
+    val laneHintColor = MaterialTheme.colorScheme.outline
+    val laneHintStyle = TextStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+    val laneNameStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 10.sp)
     val description = stringResource(R.string.timeline_description)
 
     Canvas(
@@ -264,6 +303,8 @@ fun Timeline(
                     handleReachIn = HandleReachIn.toPx(),
                     playheadReach = PlayheadReach.toPx(),
                     trackSlack = TrackSlack.toPx(),
+                    laneTop = LaneTop.toPx(),
+                    laneBottom = (LaneTop + LaneHeight).toPx(),
                 )
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -283,15 +324,40 @@ fun Timeline(
                     val clipLeft = view.xOf(startProject.clipStartMs(index).toFloat())
                     val clipRight = clipLeft + clip.durationMs * pxPerMs0
                     val playheadX = view.xOf(currentPosition().toFloat())
-                    val target = hitTest(down.position.x, down.position.y, clipLeft, clipRight, playheadX, metrics)
+                    val placements = startProject.audioPlacements()
+                    val laneBoxes = placements.map {
+                        LaneBox(it.clip.id, view.xOf(it.startMs.toFloat()), view.xOf(it.endMs.toFloat()))
+                    }
+                    val hit = hitTimeline(
+                        down.position.x, down.position.y, clipLeft, clipRight, playheadX, metrics,
+                        laneBoxes, currentSelectedAudio,
+                    )
+                    val target = hit.target
 
                     touching = true
                     // What was touched lights up at once, so it is clear what the finger has.
                     held = target.takeIf {
                         it == TimelineTarget.PLAYHEAD ||
                             it == TimelineTarget.START_HANDLE ||
-                            it == TimelineTarget.END_HANDLE
+                            it == TimelineTarget.END_HANDLE ||
+                            it == TimelineTarget.AUDIO_START_HANDLE ||
+                            it == TimelineTarget.AUDIO_END_HANDLE ||
+                            it == TimelineTarget.AUDIO_CLIP
                     }
+                    heldAudio = hit.audioId
+
+                    // Audio edges snap onto the playhead, the cuts and the other audio edges.
+                    fun snapTargets(exceptAudio: Long): List<Long> = buildList {
+                        add(0L)
+                        add(startProject.durationMs)
+                        add(currentPosition())
+                        for (i in 1 until startProject.clips.size) add(startProject.clipStartMs(i))
+                        placements.filter { it.clip.id != exceptAudio }.forEach {
+                            add(it.startMs)
+                            add(it.endMs)
+                        }
+                    }
+                    val snapReachMs = SnapReach.toPx() / pxPerMs0
                     try {
                         // Nothing moves until the finger has clearly moved; a second finger
                         // before that turns the gesture into a zoom. From then on everything
@@ -333,13 +399,57 @@ fun Timeline(
                                 }
                             }
 
-                            dragX.isNaN() -> {
+                            dragX.isNaN() -> when (target) {
                                 // A tap. On the strip or the time scale it puts the playhead there.
-                                val tapped = target == TimelineTarget.STRIP || target == TimelineTarget.RULER
-                                if (tapped && !caughtMotion) {
+                                TimelineTarget.STRIP, TimelineTarget.RULER -> if (!caughtMotion) {
                                     val time = view.timeAt(down.position.x).coerceIn(0f, durationMs)
                                     currentOnScrub(time.roundToLong())
                                     currentOnScrubEnd()
+                                    currentOnSelectAudio(null)
+                                }
+                                TimelineTarget.AUDIO_CLIP -> currentOnSelectAudio(hit.audioId)
+                                TimelineTarget.AUDIO_EMPTY ->
+                                    if (placements.isEmpty()) currentOnAddAudio() else currentOnSelectAudio(null)
+                                else -> Unit
+                            }
+
+                            target == TimelineTarget.AUDIO_CLIP -> {
+                                // Moves the audio clip; only it moves.
+                                val id = hit.audioId!!
+                                val audioClip = startProject.audio.first { it.id == id }
+                                val length = audioClip.lengthMs(startProject.speed)
+                                val targets = snapTargets(id)
+                                currentOnAudioEditStart(id)
+                                try {
+                                    followPointer(down.id, dragX) { x ->
+                                        val start = audioClip.startMs + ((x - downX) / pxPerMs0).roundToLong()
+                                        val snappedStart = snap(start, targets, snapReachMs)
+                                        val snapped = if (snappedStart != start) {
+                                            snappedStart
+                                        } else {
+                                            snap(start + length, targets, snapReachMs) - length
+                                        }
+                                        currentOnAudioMove(id, snapped)
+                                    }
+                                } finally {
+                                    currentOnAudioEditEnd()
+                                }
+                            }
+
+                            target == TimelineTarget.AUDIO_START_HANDLE || target == TimelineTarget.AUDIO_END_HANDLE -> {
+                                val id = hit.audioId!!
+                                val box = laneBoxes.first { it.id == id }
+                                val edge = if (target == TimelineTarget.AUDIO_START_HANDLE) Edge.START else Edge.END
+                                val grab = downX - (if (edge == Edge.START) box.left else box.right)
+                                val targets = snapTargets(id)
+                                currentOnAudioEditStart(id)
+                                try {
+                                    followPointer(down.id, dragX) { x ->
+                                        val time = view.timeAt(x - grab).roundToLong()
+                                        currentOnAudioTrim(id, edge, snap(time, targets, snapReachMs))
+                                    }
+                                } finally {
+                                    currentOnAudioEditEnd()
                                 }
                             }
 
@@ -413,6 +523,7 @@ fun Timeline(
                         }
                     } finally {
                         held = null
+                        heldAudio = null
                         touching = false
                         if (trim == null && !settling && motion?.isActive != true) pinForZoom()
                     }
@@ -454,46 +565,14 @@ fun Timeline(
         project.clips.getOrNull(index)?.let { clip ->
             val left = view.xOf(project.clipStartMs(index).toFloat())
             val right = left + clip.durationMs * pxPerMs
-            val handle = HandleWidth.toPx()
-            val border = 2.5.dp.toPx()
-            val top = trackTop - border
-            val bottom = trackTop + trackHeight + border
-            val frameCorner = CornerRadius(8.dp.toPx())
-            val outer = Path().apply {
-                addRoundRect(RoundRect(Rect(left - handle, top, right + handle, bottom), frameCorner))
-            }
-            val inner = Path().apply {
-                addRoundRect(
-                    RoundRect(
-                        Rect(left, trackTop, max(left + 1f, right), trackTop + trackHeight),
-                        CornerRadius(2.dp.toPx()),
-                    ),
-                )
-            }
-            drawPath(Path.combine(PathOperation.Difference, outer, inner), Color.White)
-
-            // The handle in the finger's grip lights up.
-            val heldLeft = when (held) {
-                TimelineTarget.START_HANDLE -> left - handle
-                TimelineTarget.END_HANDLE -> right
-                else -> null
-            }
-            if (heldLeft != null) {
-                val lit = Path().apply { addRect(Rect(heldLeft, top, heldLeft + handle, bottom)) }
-                drawPath(Path.combine(PathOperation.Intersect, outer, lit), heldColor)
-            }
-
-            val gripHeight = 20.dp.toPx()
-            val gripWidth = 3.dp.toPx()
-            val gripTop = trackTop + (trackHeight - gripHeight) / 2
-            for (x in floatArrayOf(left - handle / 2, right + handle / 2)) {
-                drawRoundRect(
-                    color = gripColor,
-                    topLeft = Offset(x - gripWidth / 2, gripTop),
-                    size = Size(gripWidth, gripHeight),
-                    cornerRadius = CornerRadius(gripWidth / 2),
-                )
-            }
+            drawClipFrame(
+                left, right, trackTop, trackHeight,
+                heldStart = held == TimelineTarget.START_HANDLE,
+                heldEnd = held == TimelineTarget.END_HANDLE,
+                heldColor = heldColor,
+                gripColor = gripColor,
+                gripHeight = 20.dp.toPx(),
+            )
 
             // Length of the current clip, inside its top left corner.
             val label = textMeasurer.measure(formatTime(clip.durationMs), badgeStyle)
@@ -510,11 +589,77 @@ fun Timeline(
             }
         }
 
+        // The audio lane.
+        val laneTop = LaneTop.toPx()
+        val laneHeight = LaneHeight.toPx()
+        val placements = project.audioPlacements()
+        if (placements.isEmpty()) {
+            // An invitation to add audio, as wide as the video.
+            val left = max(view.xOf(0f), 0f)
+            val right = min(view.xOf(project.durationMs.toFloat()), size.width)
+            if (right - left > 24.dp.toPx()) {
+                drawRoundRect(
+                    color = laneHintColor,
+                    topLeft = Offset(left + 1.dp.toPx(), laneTop),
+                    size = Size(right - left - 2.dp.toPx(), laneHeight),
+                    cornerRadius = CornerRadius(6.dp.toPx()),
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())),
+                    ),
+                )
+                val label = textMeasurer.measure(
+                    addAudioLabel, laneHintStyle, overflow = TextOverflow.Ellipsis, maxLines = 1,
+                    constraints = Constraints(maxWidth = max(1, (right - left - 16.dp.toPx()).toInt())),
+                )
+                drawText(
+                    label,
+                    topLeft = Offset((left + right - label.size.width) / 2, laneTop + (laneHeight - label.size.height) / 2),
+                )
+            }
+        }
+        for (placement in placements) {
+            val left = view.xOf(placement.startMs.toFloat())
+            val right = view.xOf(placement.endMs.toFloat())
+            if (right < 0f || left > size.width) continue
+            val body = Rect(left + gap, laneTop, max(left + gap + 1f, right - gap), laneTop + laneHeight)
+            val clipAudio = placement.clip
+            clipPath(Path().apply { addRoundRect(RoundRect(body, corner)) }) {
+                drawRect(laneFill, body.topLeft, body.size)
+                waveforms.cache[clipAudio.source.uri]?.let { peaks ->
+                    drawWaveform(peaks, placement, project.speed, view, body, waveColor)
+                }
+                val pad = 4.dp.toPx()
+                val textLeft = max(body.left, 0f) + pad
+                val room = (min(body.right, size.width) - textLeft - pad).toInt()
+                if (room > 12.dp.toPx()) {
+                    val volumeText = if (clipAudio.volume != 1f) "  ${(clipAudio.volume * 100).roundToInt()} %" else ""
+                    val name = textMeasurer.measure(
+                        clipAudio.source.name + volumeText, laneNameStyle,
+                        overflow = TextOverflow.Ellipsis, maxLines = 1,
+                        constraints = Constraints(maxWidth = room),
+                    )
+                    drawText(name, topLeft = Offset(textLeft, laneTop + 2.dp.toPx()))
+                }
+            }
+            if (clipAudio.id == selectedAudioId || clipAudio.id == heldAudio) {
+                drawClipFrame(
+                    left, right, laneTop, laneHeight,
+                    heldStart = held == TimelineTarget.AUDIO_START_HANDLE && heldAudio == clipAudio.id,
+                    heldEnd = held == TimelineTarget.AUDIO_END_HANDLE && heldAudio == clipAudio.id,
+                    heldColor = heldColor,
+                    gripColor = gripColor,
+                    gripHeight = 14.dp.toPx(),
+                    frameColor = if (held == TimelineTarget.AUDIO_CLIP && heldAudio == clipAudio.id) heldColor else Color.White,
+                )
+            }
+        }
+
         // Playhead: a line across the clips with a knob above them to take it by.
         val playheadX = view.xOf(positionMs().toFloat())
         if (playheadX > -KnobRadius.toPx() && playheadX < size.width + KnobRadius.toPx()) {
             val knobY = LabelsHeight.toPx() + KnobLaneHeight.toPx() / 2
-            val bottom = trackTop + trackHeight + 10.dp.toPx()
+            val bottom = laneTop + laneHeight + 6.dp.toPx()
             val holding = held == TimelineTarget.PLAYHEAD
             val radius = KnobRadius.toPx() * (if (holding) 1.25f else 1f)
             val shade = Color.Black.copy(alpha = 0.55f)
@@ -523,6 +668,84 @@ fun Timeline(
             drawCircle(shade, radius + 1.5.dp.toPx(), Offset(playheadX, knobY))
             drawCircle(if (holding) heldColor else Color.White, radius, Offset(playheadX, knobY))
         }
+    }
+}
+
+/**
+ * A white frame around a clip whose thick sides are its trim handles; a held handle lights up.
+ */
+private fun DrawScope.drawClipFrame(
+    left: Float,
+    right: Float,
+    top: Float,
+    height: Float,
+    heldStart: Boolean,
+    heldEnd: Boolean,
+    heldColor: Color,
+    gripColor: Color,
+    gripHeight: Float,
+    frameColor: Color = Color.White,
+) {
+    val handle = HandleWidth.toPx()
+    val border = 2.5.dp.toPx()
+    val outerTop = top - border
+    val outerBottom = top + height + border
+    val outer = Path().apply {
+        addRoundRect(RoundRect(Rect(left - handle, outerTop, right + handle, outerBottom), CornerRadius(8.dp.toPx())))
+    }
+    val inner = Path().apply {
+        addRoundRect(RoundRect(Rect(left, top, max(left + 1f, right), top + height), CornerRadius(2.dp.toPx())))
+    }
+    val frame = Path.combine(PathOperation.Difference, outer, inner)
+    drawPath(frame, frameColor)
+    val litLeft = when {
+        heldStart -> left - handle
+        heldEnd -> right
+        else -> null
+    }
+    if (litLeft != null) {
+        val lit = Path().apply { addRect(Rect(litLeft, outerTop, litLeft + handle, outerBottom)) }
+        drawPath(Path.combine(PathOperation.Intersect, frame, lit), heldColor)
+    }
+    val gripWidth = 3.dp.toPx()
+    val gripTop = top + (height - gripHeight) / 2
+    for (x in floatArrayOf(left - handle / 2, right + handle / 2)) {
+        drawRoundRect(
+            color = gripColor,
+            topLeft = Offset(x - gripWidth / 2, gripTop),
+            size = Size(gripWidth, gripHeight),
+            cornerRadius = CornerRadius(gripWidth / 2),
+        )
+    }
+}
+
+/** The loudness of the part of the file that [placement] plays, as bars across [body]. */
+private fun DrawScope.drawWaveform(
+    peaks: FloatArray,
+    placement: AudioPlacement,
+    speed: Float,
+    view: TimelineView,
+    body: Rect,
+    color: Color,
+) {
+    val step = 2.dp.toPx()
+    val middle = body.top + body.height * 0.6f
+    val reach = body.height * 0.36f
+    val gain = placement.clip.volume.coerceIn(0f, 1f)
+    var x = max(body.left, 0f)
+    val end = min(body.right, size.width)
+    while (x < end) {
+        val from = placement.sourceAt(view.timeAt(x).roundToLong(), speed) / WAVEFORM_BUCKET_MS
+        val to = placement.sourceAt(view.timeAt(x + step).roundToLong(), speed) / WAVEFORM_BUCKET_MS
+        var peak = 0f
+        var bucket = from.coerceAtLeast(0)
+        while (bucket <= max(from, to) && bucket < peaks.size) {
+            peak = max(peak, peaks[bucket.toInt()])
+            bucket++
+        }
+        val half = max(0.75.dp.toPx(), peak * gain * reach)
+        drawLine(color, Offset(x, middle - half), Offset(x, middle + half), step * 0.6f)
+        x += step
     }
 }
 

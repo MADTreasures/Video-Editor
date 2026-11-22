@@ -5,7 +5,8 @@
     <string name="start_tagline">Trim, cut and join videos</string>
     <string name="start_pick_gallery">Choose video</string>
     <string name="start_pick_files">Browse files</string>
-    <string name="start_formats">Opens MP4, MOV, MKV, WebM, 3GP and more.\nSaves as MP4.</string>
+    <string name="start_formats">Opens MP4, MOV, MKV, WebM, 3GP, AVI and more.
+Saves as MP4, MOV, MKV, WebM or 3GP, or just the sound.</string>
     <string name="loading">Opening video…</string>
 
     <string name="action_close">Close</string>
@@ -45,8 +46,6 @@
     <string name="quality_high">High</string>
     <string name="quality_medium">Medium</string>
     <string name="quality_low">Low</string>
-    <string name="export_hevc">H.265 (HEVC)</string>
-    <string name="export_hevc_hint">Smaller file, but does not play everywhere</string>
     <string name="export_passthrough">Saved without re-encoding: fast and with no loss of quality.</string>
     <string name="export_estimate">%1$d × %2$d · about %3$s</string>
 
@@ -67,4 +66,26 @@
 
     <string name="notif_channel">Export</string>
     <string name="notif_title">Exporting video</string>
+    <string name="tool_audio">Audio</string>
+    <string name="tool_done">Done</string>
+    <string name="tool_volume">Volume %1$d %%</string>
+    <string name="volume_title">Volume</string>
+    <string name="volume_hint">Applies to this piece of audio. The video\'s own sound is switched with “Sound on/off”.</string>
+    <string name="lane_add_audio">＋ Tap to add music or audio</string>
+    <string name="msg_audio_failed">One or more files could not be opened as audio</string>
+    <string name="msg_audio_no_room">No room on the audio track at this point. Move or shorten the audio there first.</string>
+    <string name="export_format">Format</string>
+    <string name="export_audio_only">Sound only</string>
+    <string name="export_codec">Video codec</string>
+    <string name="format_mp4">Plays everywhere: phones, computers, the web.</string>
+    <string name="format_mov">For Apple devices, iMovie and Final Cut.</string>
+    <string name="format_mkv">For computer players such as VLC. Not every gallery app plays MKV.</string>
+    <string name="format_webm">For the web. Converting takes longer.</string>
+    <string name="format_3gp">Small files for older phones.</string>
+    <string name="format_m4a">Only the sound, as AAC.</string>
+    <string name="format_ogg">Only the sound, as Opus.</string>
+    <string name="export_passthrough_picture">The picture is copied without re-encoding; the sound is converted.</string>
+    <string name="export_estimate_audio">%1$d kbit/s · about %2$s</string>
+    <string name="export_no_sound">There is no sound to save: the video has none, or it is switched off.</string>
+    <string name="export_audio_dropped">Without sound: this device cannot encode sound for %1$s.</string>
 </resources>

@@ -1,6 +1,8 @@
 package io.github.madtreasures.videoeditor.media
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -12,12 +14,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.inspector.MetadataRetriever
+import io.github.madtreasures.videoeditor.model.AudioSource
 import io.github.madtreasures.videoeditor.model.VideoSource
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.math.roundToInt
 
 private const val PROBE_TIMEOUT_MS = 20_000L
 private const val TAG = "VideoEditorProbe"
@@ -30,6 +33,7 @@ private const val TAG = "VideoEditorProbe"
 suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(Dispatchers.IO) {
     var video: Format? = null
     var hasAudio = false
+    var audioMime = ""
     var durationMs = C.TIME_UNSET
 
     // Media3 reads every container the player and the exporter can handle.
@@ -43,7 +47,10 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
                         val format = group.getFormat(i)
                         val mime = format.sampleMimeType
                         if (video == null && MimeTypes.isVideo(mime)) video = format
-                        if (MimeTypes.isAudio(mime)) hasAudio = true
+                        if (MimeTypes.isAudio(mime)) {
+                            if (!hasAudio) audioMime = mime ?: ""
+                            hasAudio = true
+                        }
                     }
                 }
                 val durationUs = retriever.retrieveDurationUs().await()
@@ -60,6 +67,7 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
     var rotation = video?.rotationDegrees ?: 0
     val pixelRatio = video?.pixelWidthHeightRatio?.takeIf { it > 0f } ?: 1f
     var frameRate = video?.frameRate ?: Format.NO_VALUE.toFloat()
+    var videoMime = video?.sampleMimeType ?: ""
 
     if (video == null || durationMs <= 0 || width <= 0 || height <= 0) {
         val retriever = MediaMetadataRetriever()
@@ -80,6 +88,10 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
             }
             if (video == null) {
                 hasAudio = meta(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
+                trackMimes(context, uri).let { (v, a) ->
+                    videoMime = v
+                    audioMime = a
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Platform retriever could not read $uri", e)
@@ -105,8 +117,73 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
         height = if (sideways) displayWidth else height,
         frameRate = if (frameRate > 0f) frameRate else 30f,
         hasAudio = hasAudio,
+        videoMime = videoMime,
+        audioMime = if (hasAudio) audioMime else "",
+        rotationDegrees = ((rotation % 360) + 360) % 360,
         bitrate = if (sizeBytes > 0) (sizeBytes * 8000 / durationMs).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else 0,
     )
+}
+
+/** The codecs of the first video and audio track, as the platform's extractor reports them. */
+private fun trackMimes(context: Context, uri: Uri): Pair<String, String> {
+    val extractor = MediaExtractor()
+    return try {
+        extractor.setDataSource(context, uri, null)
+        val mimes = (0 until extractor.trackCount).mapNotNull {
+            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)
+        }
+        (mimes.firstOrNull { it.startsWith("video/") } ?: "") to (mimes.firstOrNull { it.startsWith("audio/") } ?: "")
+    } catch (e: Exception) {
+        "" to ""
+    } finally {
+        extractor.release()
+    }
+}
+
+/**
+ * Reads what the editor needs to know about an audio file. Returns null if it has no sound
+ * or cannot be read.
+ */
+@OptIn(UnstableApi::class)
+suspend fun probeAudio(context: Context, uri: Uri): AudioSource? = withContext(Dispatchers.IO) {
+    var durationMs = C.TIME_UNSET
+    var hasAudio = false
+    try {
+        withTimeoutOrNull(PROBE_TIMEOUT_MS) {
+            MetadataRetriever.Builder(context, MediaItem.fromUri(uri)).build().use { retriever ->
+                val groups = retriever.retrieveTrackGroups().await()
+                for (g in 0 until groups.length) {
+                    val group = groups[g]
+                    for (i in 0 until group.length) {
+                        if (MimeTypes.isAudio(group.getFormat(i).sampleMimeType)) hasAudio = true
+                    }
+                }
+                val durationUs = retriever.retrieveDurationUs().await()
+                if (durationUs != C.TIME_UNSET) durationMs = durationUs / 1000
+            }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "Media3 could not read $uri", e)
+    }
+    if (!hasAudio || durationMs <= 0) {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            hasAudio = hasAudio || retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
+            if (durationMs <= 0) {
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Platform retriever could not read $uri", e)
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+    if (!hasAudio || durationMs <= 0) {
+        Log.w(TAG, "No usable audio in $uri: duration=$durationMs ms")
+        return@withContext null
+    }
+    AudioSource(uri.toString(), displayName(context, uri), durationMs)
 }
 
 private fun fileSize(context: Context, uri: Uri): Long =

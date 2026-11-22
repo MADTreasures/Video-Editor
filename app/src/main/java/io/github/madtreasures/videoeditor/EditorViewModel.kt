@@ -2,6 +2,7 @@ package io.github.madtreasures.videoeditor
 
 import android.app.Application
 import android.net.Uri
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
@@ -21,18 +22,30 @@ import androidx.media3.exoplayer.ExoPlayer
 import io.github.madtreasures.videoeditor.export.ExportController
 import io.github.madtreasures.videoeditor.export.ExportState
 import io.github.madtreasures.videoeditor.media.ThumbnailLoader
+import io.github.madtreasures.videoeditor.media.Waveforms
+import io.github.madtreasures.videoeditor.media.probeAudio
 import io.github.madtreasures.videoeditor.media.probeVideo
+import io.github.madtreasures.videoeditor.model.AudioClip
 import io.github.madtreasures.videoeditor.model.Clip
 import io.github.madtreasures.videoeditor.model.Edge
 import io.github.madtreasures.videoeditor.model.ExportSettings
 import io.github.madtreasures.videoeditor.model.Project
 import io.github.madtreasures.videoeditor.model.VideoSource
+import io.github.madtreasures.videoeditor.model.addAudio
+import io.github.madtreasures.videoeditor.model.audioAt
+import io.github.madtreasures.videoeditor.model.canSplitAudioAt
+import io.github.madtreasures.videoeditor.model.moveAudio
+import io.github.madtreasures.videoeditor.model.removeAudio
+import io.github.madtreasures.videoeditor.model.setAudioVolume
+import io.github.madtreasures.videoeditor.model.splitAudio
+import io.github.madtreasures.videoeditor.model.trimAudio
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * A short notice for the user. With [offerFileBrowser] it comes with a button that opens the
@@ -80,6 +93,14 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     /** Clip and edge whose trim handle is being dragged right now. */
     private var activeTrim by mutableStateOf<Pair<Int, Edge>?>(null)
 
+    /** The audio clip on the lane the tools act on, if one is selected. */
+    var selectedAudioId by mutableStateOf<Long?>(null)
+        private set
+
+    val selectedAudio: AudioClip? by derivedStateOf {
+        selectedAudioId?.let { id -> project.audio.firstOrNull { it.id == id } }
+    }
+
     /** The clip the tools act on: the one under the playhead. */
     val currentClipIndex: Int by derivedStateOf {
         activeTrim?.first ?: project.locate(positionMs).index
@@ -92,6 +113,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     val thumbnails = ThumbnailLoader(app, viewModelScope)
 
+    val waveforms = Waveforms(app, viewModelScope)
+
     val player: ExoPlayer = ExoPlayer.Builder(app)
         .setAudioAttributes(
             AudioAttributes.Builder()
@@ -102,6 +125,27 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         )
         .setHandleAudioBecomingNoisy(true)
         .build()
+
+    /**
+     * Plays the audio lane during preview, kept in step with [player]. It does not take audio
+     * focus itself; it simply stops whenever the video stops.
+     */
+    private val lanePlayer: ExoPlayer = ExoPlayer.Builder(app)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(),
+            /* handleAudioFocus= */ false,
+        )
+        .build()
+
+    /** The lane clip [lanePlayer] has loaded, with the part of its file. */
+    private var laneLoaded: Triple<Long, Long, Long>? = null
+    private var laneLastSeekAt = 0L
+
+    /** The project as it was when a drag on the audio lane began, for undo. */
+    private var projectBeforeLiveEdit: Project? = null
 
     private val undoStack = ArrayDeque<Project>()
     private val redoStack = ArrayDeque<Project>()
@@ -142,6 +186,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         isPlaying = player.playWhenReady &&
             player.playbackState != Player.STATE_ENDED &&
             player.playbackState != Player.STATE_IDLE
+        syncLane()
     }
 
     // ---- Opening videos ----
@@ -177,6 +222,103 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Audio lane ----
+
+    /** Puts audio files on the lane at the playhead, one after another. */
+    fun addAudio(uris: List<Uri>) {
+        if (uris.isEmpty() || isLoading || project.isEmpty) return
+        viewModelScope.launch {
+            isLoading = true
+            player.pause()
+            var updated = project
+            var at = positionMs
+            var failed = false
+            var noRoom = false
+            var lastAdded: Long? = null
+            for (uri in uris) {
+                val source = probeAudio(getApplication(), uri)
+                if (source == null) {
+                    failed = true
+                    continue
+                }
+                val next = updated.addAudio(source, at) { nextClipId++ }
+                if (next === updated) {
+                    noRoom = true
+                    continue
+                }
+                val added = next.audio.first { clip -> updated.audio.none { it.id == clip.id } }
+                waveforms.request(source.uri)
+                lastAdded = added.id
+                at = added.endMs(next.speed)
+                updated = next
+            }
+            isLoading = false
+            if (failed) _messages.tryEmit(UiMessage(R.string.msg_audio_failed))
+            if (noRoom) _messages.tryEmit(UiMessage(R.string.msg_audio_no_room))
+            if (updated !== project) {
+                commit(updated)
+                selectedAudioId = lastAdded
+            }
+        }
+    }
+
+    fun selectAudio(id: Long?) {
+        selectedAudioId = id?.takeIf { wanted -> project.audio.any { it.id == wanted } }
+    }
+
+    /** Starts a drag on the audio lane: the changes it makes are undone as one step. */
+    fun audioEditStart(id: Long) {
+        if (project.audio.none { it.id == id }) return
+        scrubEnd()
+        player.pause()
+        selectedAudioId = id
+        projectBeforeLiveEdit = project
+    }
+
+    fun audioMoveTo(id: Long, startMs: Long) {
+        if (projectBeforeLiveEdit == null) return
+        project = project.moveAudio(id, startMs)
+    }
+
+    fun audioTrimTo(id: Long, edge: Edge, valueMs: Long) {
+        if (projectBeforeLiveEdit == null) return
+        project = project.trimAudio(id, edge, valueMs)
+    }
+
+    fun audioEditEnd() {
+        val before = projectBeforeLiveEdit ?: return
+        projectBeforeLiveEdit = null
+        if (before != project) pushUndo(before)
+    }
+
+    /** Changes the volume while the slider moves; [commitAudioVolume] makes it one undo step. */
+    fun previewAudioVolume(id: Long, volume: Float) {
+        if (projectBeforeLiveEdit == null) projectBeforeLiveEdit = project
+        project = project.setAudioVolume(id, volume)
+        syncLane()
+    }
+
+    fun commitAudioVolume() = audioEditEnd()
+
+    val canSplitAudio: Boolean by derivedStateOf {
+        selectedAudio?.let { project.canSplitAudioAt(it.id, positionMs) } == true
+    }
+
+    fun splitSelectedAudio() {
+        val id = selectedAudioId ?: return
+        val updated = project.splitAudio(id, positionMs) { nextClipId++ }
+        if (updated === project) return
+        commit(updated)
+        // The second part starts at the playhead; it stays selected.
+        selectedAudioId = updated.audio.firstOrNull { it.startMs == positionMs }?.id
+    }
+
+    fun deleteSelectedAudio() {
+        val id = selectedAudioId ?: return
+        selectedAudioId = null
+        commit(project.removeAudio(id))
+    }
+
     fun closeProject() {
         player.stop()
         player.clearMediaItems()
@@ -190,6 +332,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         project = Project()
         positionMs = 0
         zoom = null
+        selectedAudioId = null
+        projectBeforeLiveEdit = null
+        lanePlayer.stop()
+        lanePlayer.clearMediaItems()
+        laneLoaded = null
         thumbnails.retain(emptySet())
     }
 
@@ -220,6 +367,44 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val index = player.currentMediaItemIndex
         val clip = project.clips.getOrNull(index) ?: return
         positionMs = project.clipStartMs(index) + player.currentPosition.coerceIn(0, clip.durationMs)
+        syncLane()
+    }
+
+    /**
+     * Makes [lanePlayer] play what the audio lane holds at the playhead, or be quiet. Called on
+     * every frame while playing and whenever playback starts or stops.
+     */
+    private fun syncLane() {
+        val placement = if (isPlaying && activeTrim == null) project.audioAt(positionMs) else null
+        if (placement == null) {
+            if (lanePlayer.playWhenReady) lanePlayer.pause()
+            return
+        }
+        val clip = placement.clip
+        val wanted = placement.sourceAt(positionMs, project.speed) - clip.srcStartMs
+        val spec = Triple(clip.id, clip.srcStartMs, clip.srcEndMs)
+        if (laneLoaded != spec) {
+            val clipping = MediaItem.ClippingConfiguration.Builder()
+                .setStartPositionMs(clip.srcStartMs)
+                .apply { if (clip.srcEndMs < clip.source.durationMs) setEndPositionMs(clip.srcEndMs) }
+                .build()
+            lanePlayer.setMediaItem(
+                MediaItem.Builder().setUri(clip.source.uri).setClippingConfiguration(clipping).build(),
+                wanted,
+            )
+            lanePlayer.prepare()
+            laneLoaded = spec
+            laneLastSeekAt = SystemClock.elapsedRealtime()
+        } else {
+            val now = SystemClock.elapsedRealtime()
+            // Correct drift, but not so often that the sound stutters.
+            if (abs(lanePlayer.currentPosition - wanted) > 200 && now - laneLastSeekAt > 1000) {
+                lanePlayer.seekTo(wanted)
+                laneLastSeekAt = now
+            }
+        }
+        lanePlayer.volume = clip.volume.coerceIn(0f, 1f)
+        if (!lanePlayer.playWhenReady) lanePlayer.play()
     }
 
     private fun seekPlayer(timeMs: Long) {
@@ -405,6 +590,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
         player.setPlaybackSpeed(current.speed)
         player.volume = if (current.muted) 0f else 1f
+        current.audio.forEach { waveforms.request(it.source.uri) }
+        syncLane()
     }
 
     private fun toMediaItem(clip: Clip): MediaItem {
@@ -424,8 +611,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun startExport(settings: ExportSettings) {
         if (project.isEmpty) return
         scrubEnd()
-        // Free the preview's decoder; the exporter needs the hardware codecs.
+        // Free the preview's decoders; the exporter needs the hardware codecs.
         player.stop()
+        lanePlayer.stop()
+        laneLoaded = null
         ExportController.start(getApplication(), project, settings)
     }
 
@@ -446,6 +635,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         player.removeListener(playerListener)
         player.release()
+        lanePlayer.release()
         thumbnails.close()
     }
 }

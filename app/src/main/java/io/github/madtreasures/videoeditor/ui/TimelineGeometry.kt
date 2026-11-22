@@ -22,7 +22,25 @@ enum class TimelineTarget {
 
     /** The clips themselves, away from handles and playhead. */
     STRIP,
+
+    /** The handle at the start of the selected audio clip. */
+    AUDIO_START_HANDLE,
+
+    /** The handle at the end of the selected audio clip. */
+    AUDIO_END_HANDLE,
+
+    /** An audio clip on the lane, away from the selected clip's handles. */
+    AUDIO_CLIP,
+
+    /** The audio lane where it holds no clip. */
+    AUDIO_EMPTY,
 }
+
+/** What a finger went down on; [audioId] names the audio clip for the audio targets. */
+data class TimelineHit(val target: TimelineTarget, val audioId: Long? = null)
+
+/** Where an audio clip is on screen. */
+data class LaneBox(val id: Long, val left: Float, val right: Float)
 
 /** Sizes of the timeline's parts and of their touch areas, in pixels. */
 data class TimelineMetrics(
@@ -40,6 +58,9 @@ data class TimelineMetrics(
     val playheadReach: Float,
     /** How far above and below the track a touch still counts as on the track. */
     val trackSlack: Float,
+    /** The audio lane under the video track. */
+    val laneTop: Float = Float.NaN,
+    val laneBottom: Float = Float.NaN,
 )
 
 /**
@@ -87,6 +108,56 @@ fun hitTest(
     clipRight: Float,
     playheadX: Float,
     metrics: TimelineMetrics,
+): TimelineTarget = hitTimeline(x, y, clipLeft, clipRight, playheadX, metrics).target
+
+/**
+ * Like [hitTest], and also knows the audio lane: on the lane, the selected audio clip's handles
+ * come first, then any audio clip (to select or move it), then the playhead.
+ */
+fun hitTimeline(
+    x: Float,
+    y: Float,
+    clipLeft: Float,
+    clipRight: Float,
+    playheadX: Float,
+    metrics: TimelineMetrics,
+    lane: List<LaneBox> = emptyList(),
+    selectedAudioId: Long? = null,
+): TimelineHit {
+    val laneSlack = metrics.trackSlack / 2
+    if (!metrics.laneTop.isNaN() && y >= metrics.laneTop - laneSlack && y <= metrics.laneBottom + laneSlack) {
+        lane.firstOrNull { it.id == selectedAudioId }?.let { box ->
+            val onStart = x >= box.left - metrics.handleWidth - metrics.handleReachOut &&
+                x <= box.left + metrics.handleReachIn
+            val onEnd = x >= box.right - metrics.handleReachIn &&
+                x <= box.right + metrics.handleWidth + metrics.handleReachOut
+            if (onStart && onEnd) {
+                val toStart = abs(x - (box.left - metrics.handleWidth / 2))
+                val toEnd = abs(x - (box.right + metrics.handleWidth / 2))
+                return TimelineHit(
+                    if (toStart <= toEnd) TimelineTarget.AUDIO_START_HANDLE else TimelineTarget.AUDIO_END_HANDLE,
+                    box.id,
+                )
+            }
+            if (onStart) return TimelineHit(TimelineTarget.AUDIO_START_HANDLE, box.id)
+            if (onEnd) return TimelineHit(TimelineTarget.AUDIO_END_HANDLE, box.id)
+        }
+        lane.firstOrNull { x >= it.left && x <= it.right }?.let {
+            return TimelineHit(TimelineTarget.AUDIO_CLIP, it.id)
+        }
+        if (abs(x - playheadX) <= metrics.playheadReach) return TimelineHit(TimelineTarget.PLAYHEAD)
+        return TimelineHit(TimelineTarget.AUDIO_EMPTY)
+    }
+    return TimelineHit(videoTarget(x, y, clipLeft, clipRight, playheadX, metrics))
+}
+
+private fun videoTarget(
+    x: Float,
+    y: Float,
+    clipLeft: Float,
+    clipRight: Float,
+    playheadX: Float,
+    metrics: TimelineMetrics,
 ): TimelineTarget {
     val aboveTrack = y < metrics.trackTop - metrics.trackSlack
     val belowTrack = y > metrics.trackBottom + metrics.trackSlack
@@ -105,4 +176,13 @@ fun hitTest(
     }
     if (abs(x - playheadX) <= metrics.playheadReach) return TimelineTarget.PLAYHEAD
     return if (aboveTrack) TimelineTarget.RULER else TimelineTarget.STRIP
+}
+
+/**
+ * Pulls [value] onto the nearest of [targets] if it is closer than [reachMs], so edges line up
+ * with the playhead and other cuts without pixel-perfect dragging.
+ */
+fun snap(value: Long, targets: List<Long>, reachMs: Float): Long {
+    val nearest = targets.minByOrNull { abs(it - value) } ?: return value
+    return if (abs(nearest - value) <= reachMs) nearest else value
 }

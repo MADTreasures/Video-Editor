@@ -34,9 +34,11 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Rotate90DegreesCw
@@ -55,6 +57,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,6 +84,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.madtreasures.videoeditor.EditorViewModel
 import io.github.madtreasures.videoeditor.R
+import kotlin.math.roundToInt
 
 private val Speeds = floatArrayOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 3f, 4f)
 
@@ -93,11 +98,17 @@ fun EditorScreen(
     vm: EditorViewModel,
     onPickGallery: () -> Unit,
     onPickFiles: () -> Unit,
+    onPickAudio: () -> Unit,
     onExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showClose by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
+    var showVolume by remember { mutableStateOf(false) }
+    val pickAudio = {
+        vm.pause()
+        onPickAudio()
+    }
 
     BackHandler { showClose = true }
 
@@ -168,11 +179,28 @@ fun EditorScreen(
                 onTrimStart = vm::trimStart,
                 onTrim = vm::trimTo,
                 onTrimEnd = vm::trimEnd,
+                waveforms = vm.waveforms,
+                selectedAudioId = vm.selectedAudioId,
+                addAudioLabel = stringResource(R.string.lane_add_audio),
+                onSelectAudio = vm::selectAudio,
+                onAddAudio = pickAudio,
+                onAudioEditStart = vm::audioEditStart,
+                onAudioMove = vm::audioMoveTo,
+                onAudioTrim = vm::audioTrimTo,
+                onAudioEditEnd = vm::audioEditEnd,
             )
         }
-        ToolsRow(
+        val selectedAudio = vm.selectedAudio
+        if (selectedAudio != null) {
+            AudioToolsRow(
+                vm = vm,
+                volume = selectedAudio.volume,
+                onVolume = { showVolume = true },
+            )
+        } else ToolsRow(
             vm = vm,
             onSpeed = { showSpeed = true },
+            onPickAudio = pickAudio,
             onPickGallery = onPickGallery,
             onPickFiles = onPickFiles,
         )
@@ -202,6 +230,20 @@ fun EditorScreen(
                 controls()
             }
         }
+    }
+
+    val volumeClip = vm.selectedAudio
+    if (showVolume && volumeClip != null) {
+        VolumeSheet(
+            volume = volumeClip.volume,
+            onChange = { vm.previewAudioVolume(volumeClip.id, it) },
+            onDone = {
+                vm.commitAudioVolume()
+                showVolume = false
+            },
+        )
+    } else if (showVolume) {
+        showVolume = false
     }
 
     if (showSpeed) {
@@ -307,6 +349,7 @@ private fun TransportRow(
 private fun ToolsRow(
     vm: EditorViewModel,
     onSpeed: () -> Unit,
+    onPickAudio: () -> Unit,
     onPickGallery: () -> Unit,
     onPickFiles: () -> Unit,
 ) {
@@ -317,7 +360,7 @@ private fun ToolsRow(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Share the width if every tool fits. Otherwise size the tools so that the last one in
         // view is cut in half, which shows that the row can be scrolled.
-        val count = if (canReorder) 8 else 6
+        val count = if (canReorder) 9 else 7
         val fitting = (maxWidth - ToolsPadding * 2 - ToolSpacing * (count - 1)) / count
         val toolWidth = if (fitting >= MinToolWidth) {
             minOf(fitting, MaxToolWidth)
@@ -379,6 +422,10 @@ private fun ToolsRow(
                     )
                 }
             }
+            ToolButton(
+                Icons.Rounded.MusicNote, stringResource(R.string.tool_audio), toolWidth,
+                onClick = onPickAudio,
+            )
             if (canReorder) {
                 ToolButton(
                     Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.tool_move_left), toolWidth,
@@ -427,6 +474,72 @@ private fun ToolButton(
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** The tools for the selected audio clip; "Fertig" goes back to the video tools. */
+@Composable
+private fun AudioToolsRow(vm: EditorViewModel, volume: Float, onVolume: () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val toolWidth = minOf((maxWidth - ToolsPadding * 2 - ToolSpacing * 3) / 4, MaxToolWidth)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ToolsPadding, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(ToolSpacing, Alignment.CenterHorizontally),
+        ) {
+            ToolButton(
+                Icons.Rounded.Check, stringResource(R.string.tool_done), toolWidth,
+                highlighted = true, onClick = { vm.selectAudio(null) },
+            )
+            ToolButton(
+                if (volume == 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                stringResource(R.string.tool_volume, (volume * 100).roundToInt()),
+                toolWidth,
+                onClick = onVolume,
+            )
+            ToolButton(
+                Icons.Rounded.ContentCut, stringResource(R.string.tool_split), toolWidth,
+                enabled = vm.canSplitAudio, onClick = vm::splitSelectedAudio,
+            )
+            ToolButton(
+                Icons.Rounded.DeleteOutline, stringResource(R.string.tool_delete), toolWidth,
+                onClick = vm::deleteSelectedAudio,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VolumeSheet(volume: Float, onChange: (Float) -> Unit, onDone: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDone) {
+        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.volume_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("${(volume * 100).roundToInt()} %", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.height(8.dp))
+            // Steps of 5 %; the label above shows the exact value.
+            val slider = remember { SliderState(value = volume.coerceIn(0f, 1f), steps = 19) }
+            Slider(
+                state = slider,
+                onValueChange = { value ->
+                    slider.value = value
+                    onChange((value * 20).roundToInt() / 20f)
+                },
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.volume_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

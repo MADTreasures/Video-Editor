@@ -6,21 +6,39 @@ Internet-Berechtigung; alles passiert auf dem Gerät.
 ## Was die App kann
 
 - **Videos öffnen** aus der Galerie oder über den Dateimanager, auch per „Öffnen mit“ und
-  „Teilen“ aus anderen Apps. Gelesen werden MP4, MOV, MKV, WebM, 3GP und weitere Formate,
+  „Teilen“ aus anderen Apps. Gelesen werden MP4, MOV, MKV, WebM, 3GP, AVI und weitere Formate,
   soweit das Gerät den jeweiligen Codec abspielen kann.
 - **Kürzen:** Anfang und Ende eines Clips über die weißen Griffe in der Timeline ziehen.
-- **Teilen und Löschen:** Clip an der Abspielposition teilen und einzelne Teile entfernen, um
-  zum Beispiel ein Stück aus der Mitte herauszuschneiden.
+- **Teilen und Löschen:** Clip am Abspielkopf teilen und einzelne Teile entfernen, um zum Beispiel
+  ein Stück aus der Mitte herauszuschneiden.
 - **Zusammenfügen:** weitere Videos anhängen und die Reihenfolge der Clips ändern.
+- **Tonspur:** Musik oder andere Audiodateien (MP3, M4A, AAC, WAV, OGG, FLAC …) unter das Video
+  legen, verschieben, kürzen, teilen und in der Lautstärke anpassen. Der Originalton bleibt
+  erhalten und wird mit der Musik gemischt; mit „Ton aus“ bleibt nur die Musik.
 - **Drehen** in 90°-Schritten, **Ton aus** und **Tempo** von 0,25x bis 4x für das ganze Video.
+  Hinzugefügte Musik läuft immer in normalem Tempo.
 - **Rückgängig / Wiederholen** für alle Schritte.
-- **Export als MP4** (H.264 oder H.265, Ton als AAC) nach `Movies/VideoEditor`, wahlweise
-  kleiner skaliert (1080p, 720p, 480p) und in drei Qualitätsstufen. Der Export läuft weiter,
-  wenn man die App verlässt.
+- **Umwandeln und Exportieren** in das Format deiner Wahl, unabhängig vom Format der Quelle:
 
-Wenn nur das Ende gekürzt oder gedreht wurde, kopiert die App Bild und Ton unverändert in die
-neue Datei. Das geht sehr schnell und ohne Qualitätsverlust. In allen anderen Fällen wird das
-Video neu kodiert.
+  | Format | Bild | Ton | Gut für |
+  | --- | --- | --- | --- |
+  | MP4 | H.264, H.265, AV1 | AAC | überall |
+  | MOV | H.264, H.265 | AAC | Apple-Geräte, iMovie, Final Cut |
+  | MKV | H.264, VP9 | AAC | PC-Player wie VLC |
+  | WebM | VP9, VP8 | Opus | Web |
+  | 3GP | H.264 | AAC | kleine Dateien, ältere Handys |
+  | M4A | – | AAC | nur den Ton speichern |
+  | OGG | – | Opus | nur den Ton speichern |
+
+  Angeboten werden nur die Codecs, die das Gerät kodieren kann. Videos landen in
+  `Movies/VideoEditor`, reine Tondateien in `Music/VideoEditor`. Dazu kommen drei Auflösungen
+  (1080p, 720p, 480p) und drei Qualitätsstufen. Der Export läuft weiter, wenn man die App
+  verlässt, und meldet sich per Benachrichtigung.
+
+Passt der Codec der Quelle in das gewählte Format, übernimmt die App das Bild unverändert. Das
+gilt zum Beispiel für H.264 aus MP4 nach MKV, MOV oder 3GP, wenn nur das Ende gekürzt oder
+gedreht wurde. Das geht sehr schnell und ohne Qualitätsverlust. In allen anderen Fällen wird neu
+kodiert.
 
 ## Bedienung der Timeline
 
@@ -35,6 +53,9 @@ es leuchtet beim Berühren auf.
 | Linken oder rechten Griff ziehen | Anfang oder Ende des Clips kürzen; nur diese Kante bewegt sich, die andere Kante und die Bilder bleiben stehen |
 | Filmstreifen ziehen | Ausschnitt verschieben, sobald das Projekt nach dem Vergrößern breiter ist als die Anzeige |
 | Zwei Finger auseinander / zusammen | Timeline vergrößern / verkleinern |
+| Auf die leere Tonspur tippen | Musik oder Audio hinzufügen |
+| Auf ein Audiostück tippen | auswählen; es bekommt eigene Griffe zum Kürzen |
+| Audiostück ziehen | verschieben; Kanten rasten am Abspielkopf und an Schnitten ein |
 
 Die Griffe sitzen am Clip unter dem Abspielkopf (weiß umrahmt). Beim Ziehen eines Griffs zeigt
 die Vorschau das Bild an der Schnittkante, danach wieder das Bild unter dem Abspielkopf. Der
@@ -42,7 +63,8 @@ Abspielkopf bleibt beim Kürzen auf seinem Bild stehen; nur wenn dieses Bild weg
 wird, rückt er an die neue Kante.
 
 Teilen, Löschen, Früher und Später wirken auf den Clip unter dem Abspielkopf. Tempo, Ton und
-Drehen gelten für das ganze Video.
+Drehen gelten für das ganze Video. Ist ein Audiostück ausgewählt, zeigt die Werkzeugleiste
+dessen Werkzeuge: Lautstärke, Teilen am Abspielkopf und Löschen; „Fertig“ führt zurück.
 
 ## Berechtigungen
 
@@ -88,4 +110,9 @@ eine ältere installieren lässt. Mehr dazu in [`keystore/README.md`](keystore/R
 - Drehen, Ton und Tempo gelten für das ganze Video, nicht für einzelne Clips.
 - Neu kodierte Videos werden in normalem Kontrastumfang (SDR) gespeichert, auch wenn die
   Quelle HDR ist.
-- Gespeichert wird immer als MP4.
+- MP3 kann die App nicht schreiben, weil Android dafür keinen Encoder mitbringt; für reinen Ton
+  gibt es M4A und OGG. AVI und GIF werden ebenfalls nicht geschrieben.
+- WebM und OGG brauchen für den Ton einen Opus-Encoder, den Android erst ab Version 10 hat.
+  Auf älteren Geräten wird WebM ohne Ton gespeichert; die App weist darauf hin.
+- MKV und WebM kennen keine Drehungs-Angabe. Hochkant-Videos werden dafür immer aufrecht neu
+  kodiert.

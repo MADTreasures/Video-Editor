@@ -1,6 +1,9 @@
 package io.github.madtreasures.videoeditor.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,9 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
@@ -26,6 +29,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,12 +55,7 @@ fun StartScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            Icons.Rounded.ContentCut,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(56.dp),
-        )
+        AppLogo(Modifier.size(88.dp))
         Spacer(Modifier.height(20.dp))
         Text(
             stringResource(R.string.app_name),
@@ -92,6 +95,27 @@ fun StartScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** The app icon as it appears on the home screen: the cut play button on the warm gradient. */
+@Composable
+fun AppLogo(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(28))
+            .background(
+                Brush.linearGradient(
+                    listOf(colorResource(R.color.logo_start), colorResource(R.color.logo_middle), colorResource(R.color.logo_end)),
+                ),
+            ),
+    ) {
+        // The foreground layer keeps the adaptive icon's padding, so it fills the tile like on the launcher.
+        Image(
+            painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize().scale(1.25f),
         )
     }
 }

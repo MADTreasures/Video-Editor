@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.madtreasures.videoeditor.EditorViewModel
 import io.github.madtreasures.videoeditor.R
 import io.github.madtreasures.videoeditor.export.ExportState
+import io.github.madtreasures.videoeditor.model.Container
 import io.github.madtreasures.videoeditor.model.ExportSettings
 import kotlinx.coroutines.launch
 
@@ -72,6 +73,19 @@ fun VideoEditorApp(vm: EditorViewModel) {
         galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
     }
     val pickFiles = { filePicker.launch(arrayOf("video/*")) }
+    val audioPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> vm.addAudio(uris) }
+    val pickAudio = { audioPicker.launch(arrayOf("audio/*")) }
+
+    // The file type chosen last time is offered again.
+    val prefs = remember { context.getSharedPreferences("export", Context.MODE_PRIVATE) }
+    var lastContainer by remember {
+        mutableStateOf(
+            runCatching { Container.valueOf(prefs.getString("container", null) ?: "") }
+                .getOrDefault(Container.MP4),
+        )
+    }
 
     // Before an export: Android 13+ is asked for notifications (progress and "saved" while the
     // app is in the background; the export also runs without them), Android 9 and older for
@@ -123,6 +137,7 @@ fun VideoEditorApp(vm: EditorViewModel) {
                         vm = vm,
                         onPickGallery = pickGallery,
                         onPickFiles = pickFiles,
+                        onPickAudio = pickAudio,
                         onExport = { showExportSettings = true },
                     )
                 }
@@ -153,9 +168,12 @@ fun VideoEditorApp(vm: EditorViewModel) {
         if (showExportSettings && !vm.project.isEmpty && exportState == ExportState.Idle) {
             ExportSettingsDialog(
                 project = vm.project,
+                initialContainer = lastContainer,
                 onDismiss = { showExportSettings = false },
                 onExport = { settings ->
                     showExportSettings = false
+                    lastContainer = settings.container
+                    prefs.edit().putString("container", settings.container.name).apply()
                     val permission = when {
                         Build.VERSION.SDK_INT >= 33 -> Manifest.permission.POST_NOTIFICATIONS
                         Build.VERSION.SDK_INT < 29 -> Manifest.permission.WRITE_EXTERNAL_STORAGE
@@ -183,7 +201,7 @@ fun VideoEditorApp(vm: EditorViewModel) {
             onDismiss = vm::dismissExport,
             onShare = { done ->
                 val send = Intent(Intent.ACTION_SEND)
-                    .setType("video/mp4")
+                    .setType(done.mimeType)
                     .putExtra(Intent.EXTRA_STREAM, done.uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 context.launch(Intent.createChooser(send, null)) {
@@ -192,7 +210,7 @@ fun VideoEditorApp(vm: EditorViewModel) {
             },
             onOpen = { done ->
                 val view = Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(done.uri, "video/mp4")
+                    .setDataAndType(done.uri, done.mimeType)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 context.launch(view) {
                     scope.launch { snackbar.showSnackbar(context.getString(R.string.msg_no_app)) }

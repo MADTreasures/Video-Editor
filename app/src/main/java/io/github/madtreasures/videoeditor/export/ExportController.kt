@@ -14,14 +14,17 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.SpeedParameters
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.ChannelMixingAudioProcessor
+import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.ScaleAndRotateTransformation
+import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
@@ -32,10 +35,20 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
+import io.github.madtreasures.videoeditor.model.Container
 import io.github.madtreasures.videoeditor.model.ExportPlan
 import io.github.madtreasures.videoeditor.model.ExportSettings
 import io.github.madtreasures.videoeditor.model.Project
+import io.github.madtreasures.videoeditor.model.audioPlacements
+import io.github.madtreasures.videoeditor.model.hasLaneAudio
 import io.github.madtreasures.videoeditor.model.planExport
+import java.io.File
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.coroutines.resume
+import kotlin.math.max
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,12 +60,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlin.coroutines.resume
 
 sealed interface ExportState {
     data object Idle : ExportState
@@ -62,7 +69,7 @@ sealed interface ExportState {
 
     data object Saving : ExportState
 
-    data class Done(val uri: Uri, val location: String, val sizeBytes: Long) : ExportState
+    data class Done(val uri: Uri, val location: String, val sizeBytes: Long, val mimeType: String) : ExportState
 
     data class Failed(val reason: String) : ExportState
 }
@@ -108,7 +115,11 @@ object ExportController {
         } catch (e: Exception) {
             // Without the service the export still runs for as long as the app stays open.
         }
-        val plan = planExport(project, settings)
+        val plan = planExport(project, settings, encodableCodecs)
+        if (!plan.canExport) {
+            _state.value = ExportState.Failed("Nothing to export")
+            return
+        }
         run(app, project, settings, plan, passthrough = plan.passthrough)
     }
 
@@ -132,7 +143,8 @@ object ExportController {
         passthrough: Boolean,
     ) {
         val dir = File(app.cacheDir, "export").apply { mkdirs() }
-        val file = File(dir, "export.mp4").apply { delete() }
+        dir.listFiles()?.forEach { it.delete() }
+        val file = File(dir, "export." + plan.container.extension)
         tempFile = file
 
         val listener = object : Transformer.Listener {
@@ -141,9 +153,10 @@ object ExportController {
                 _state.value = ExportState.Saving
                 scope.launch {
                     _state.value = try {
+                        withContext(Dispatchers.IO) { patchFileType(file, plan.container) }
                         val size = file.length()
-                        val (uri, location) = saveToGallery(app, file)
-                        ExportState.Done(uri, location, size)
+                        val (uri, location) = saveToGallery(app, file, plan.container)
+                        ExportState.Done(uri, location, size, plan.container.mimeType)
                     } catch (e: Exception) {
                         ExportState.Failed(e.message ?: e.javaClass.simpleName)
                     } finally {
@@ -220,7 +233,7 @@ object ExportController {
     private fun buildTransformer(
         app: Context,
         plan: ExportPlan,
-        settings: ExportSettings,
+        @Suppress("UNUSED_PARAMETER") settings: ExportSettings,
         passthrough: Boolean,
         listener: Transformer.Listener,
     ): Transformer {
@@ -229,22 +242,32 @@ object ExportController {
             .setMaxDelayBetweenMuxerSamplesMs(
                 if (Util.isRunningOnEmulator()) STALL_TIMEOUT_EMULATOR_MS else STALL_TIMEOUT_MS,
             )
-        if (!passthrough) {
-            val encoderSettings = VideoEncoderSettings.Builder().setBitrate(plan.videoBitrate).build()
-            builder
-                .setVideoMimeType(if (settings.hevc) MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
-                .setAudioMimeType(MimeTypes.AUDIO_AAC)
-                .setEncoderFactory(
-                    DefaultEncoderFactory.Builder(app)
-                        .setRequestedVideoEncoderSettings(encoderSettings)
-                        .build(),
-                )
+        muxerFactoryFor(plan.container)?.let(builder::setMuxerFactory)
+        // Matroska files have no rotation flag: a portrait picture is stored as portrait.
+        if (plan.portraitEncoding) builder.setPortraitEncodingEnabled(true)
+        plan.videoCodec?.let { if (plan.hasVideo) builder.setVideoMimeType(it.mime) }
+        if (plan.hasAudio) builder.setAudioMimeType(plan.container.audioCodec.mime)
+
+        // Requested encoder settings make Media3 re-encode even a stream it could copy, so they
+        // are only given for what is re-encoded anyway.
+        val encoders = DefaultEncoderFactory.Builder(app)
+        if (!passthrough && plan.hasVideo) {
+            encoders.setRequestedVideoEncoderSettings(
+                VideoEncoderSettings.Builder().setBitrate(plan.videoBitrate).build(),
+            )
         }
+        if (plan.hasAudio && !(passthrough && plan.audioCopied)) {
+            encoders.setRequestedAudioEncoderSettings(
+                AudioEncoderSettings.Builder().setBitrate(plan.audioBitrate).build(),
+            )
+        }
+        builder.setEncoderFactory(encoders.build())
         return builder.build()
     }
 
     private fun buildComposition(project: Project, plan: ExportPlan, passthrough: Boolean): Composition {
         val videoEffects = buildList<Effect> {
+            if (!plan.hasVideo) return@buildList
             if (project.rotation != 0) {
                 // The project stores clockwise degrees, Media3 rotates counterclockwise.
                 add(
@@ -296,18 +319,60 @@ object ExportController {
                 .build()
         }
 
-        val sequence = if (project.hasAudio) {
-            EditedMediaItemSequence.withAudioAndVideoFrom(items)
-        } else {
-            EditedMediaItemSequence.withVideoFrom(items)
+        // The video's own sound and the added audio are separate sequences that Media3 mixes.
+        val withOwnSound = plan.hasAudio && project.hasAudio
+        val sequences = ArrayList<EditedMediaItemSequence>(2)
+        when {
+            plan.hasVideo && withOwnSound -> sequences += EditedMediaItemSequence.withAudioAndVideoFrom(items)
+            plan.hasVideo -> sequences += EditedMediaItemSequence.withVideoFrom(items)
+            withOwnSound -> sequences += EditedMediaItemSequence.withAudioFrom(items)
         }
+        if (plan.hasAudio && project.hasLaneAudio) sequences += audioLane(project)
+
         // Re-encoded video is written as standard dynamic range so it plays everywhere.
-        val hdrMode = if (!passthrough && Build.VERSION.SDK_INT >= 29) {
+        val hdrMode = if (plan.hasVideo && !passthrough && Build.VERSION.SDK_INT >= 29) {
             Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL
         } else {
             Composition.HDR_MODE_KEEP_HDR
         }
-        return Composition.Builder(sequence).setHdrMode(hdrMode).build()
+        return Composition.Builder(sequences).setHdrMode(hdrMode).build()
+    }
+
+    /**
+     * The added audio as one sequence on the output's time axis: silence until a clip begins,
+     * then the part of the file that is heard. Added audio keeps its own speed.
+     */
+    private fun audioLane(project: Project): EditedMediaItemSequence {
+        val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+        var cursorUs = 0L
+        for (placement in project.audioPlacements()) {
+            val clip = placement.clip
+            val sourceEnd = placement.sourceEnd(project.speed)
+            val lengthUs = (sourceEnd - clip.srcStartMs) * 1000
+            if (lengthUs <= 0) continue
+            val startUs = (placement.startMs * 1000.0 / project.speed).toLong()
+            if (startUs > cursorUs) builder.addGap(startUs - cursorUs)
+            val clipping = MediaItem.ClippingConfiguration.Builder()
+                .setStartPositionMs(clip.srcStartMs)
+                .apply { if (sourceEnd < clip.source.durationMs) setEndPositionMs(sourceEnd) }
+                .build()
+            val item = EditedMediaItem.Builder(
+                MediaItem.Builder().setUri(clip.source.uri).setClippingConfiguration(clipping).build(),
+            )
+            if (clip.volume != 1f) {
+                item.setEffects(Effects(listOf(volume(clip.volume)), emptyList()))
+            }
+            builder.addItem(item.build())
+            cursorUs = max(cursorUs, startUs) + lengthUs
+        }
+        return builder.build()
+    }
+
+    /** Scales every channel by [gain], for files with up to eight channels. */
+    private fun volume(gain: Float): AudioProcessor = ChannelMixingAudioProcessor().apply {
+        for (channels in 1..8) {
+            putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(channels, channels).scaleBy(gain))
+        }
     }
 
     private class ConstantSpeed(private val speed: Float) : SpeedProvider {
@@ -315,22 +380,27 @@ object ExportController {
         override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
     }
 
-    private suspend fun saveToGallery(app: Context, file: File): Pair<Uri, String> =
+    private suspend fun saveToGallery(app: Context, file: File, container: Container): Pair<Uri, String> =
         withContext(Dispatchers.IO) {
-            val name = "VID_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".mp4"
-            val location = "${Environment.DIRECTORY_MOVIES}/$EXPORT_FOLDER/$name"
+            val audio = container.audioOnly
+            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val name = (if (audio) "AUD_" else "VID_") + stamp + "." + container.extension
+            val folder = (if (audio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES) +
+                "/" + EXPORT_FOLDER
+            val location = "$folder/$name"
             if (Build.VERSION.SDK_INT >= 29) {
                 val resolver = app.contentResolver
                 val values = ContentValues().apply {
-                    put(MediaStore.Video.Media.DISPLAY_NAME, name)
-                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                    put(
-                        MediaStore.Video.Media.RELATIVE_PATH,
-                        "${Environment.DIRECTORY_MOVIES}/$EXPORT_FOLDER",
-                    )
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, container.mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, folder)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
-                val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val collection = if (audio) {
+                    MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                } else {
+                    MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                }
                 val uri = resolver.insert(collection, values)
                     ?: throw IOException("MediaStore insert failed")
                 try {
@@ -338,7 +408,7 @@ object ExportController {
                         ?: throw IOException("MediaStore open failed")
                     out.use { target -> file.inputStream().use { it.copyTo(target, 1 shl 16) } }
                     values.clear()
-                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     resolver.update(uri, values, null, null)
                 } catch (e: Exception) {
                     runCatching { resolver.delete(uri, null, null) }
@@ -347,13 +417,15 @@ object ExportController {
                 uri to location
             } else {
                 @Suppress("DEPRECATION")
-                val movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-                val dir = File(movies, EXPORT_FOLDER).apply { mkdirs() }
+                val base = Environment.getExternalStoragePublicDirectory(
+                    if (audio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES,
+                )
+                val dir = File(base, EXPORT_FOLDER).apply { mkdirs() }
                 val target = File(dir, name)
                 file.copyTo(target, overwrite = true)
                 val uri = suspendCancellableCoroutine<Uri?> { continuation ->
                     MediaScannerConnection.scanFile(
-                        app, arrayOf(target.absolutePath), arrayOf("video/mp4"),
+                        app, arrayOf(target.absolutePath), arrayOf(container.mimeType),
                     ) { _, scanned -> continuation.resume(scanned) }
                 } ?: throw IOException("Media scan failed")
                 uri to location

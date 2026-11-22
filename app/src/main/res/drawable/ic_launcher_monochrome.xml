@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A play button cut in two: the mark of the app. Generated from the geometry in the
+     repository's history; edit both pieces and the cut marks together. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -6,9 +8,26 @@
     android:viewportHeight="108">
     <path
         android:fillColor="#FFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M35,34 L73,34 A5,5 0 0 1 78,39 L78,69 A5,5 0 0 1 73,74 L35,74 A5,5 0 0 1 30,69 L30,39 A5,5 0 0 1 35,34 Z M38,38 L38,70 L70,70 L70,38 Z" />
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.0"
+        android:strokeLineJoin="round"
+        android:pathData="M55.26,39.56 L40.00,31.00 L40.00,77.00 L46.86,73.15 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M48.5,45.5 L48.5,62.5 A1.5,1.5 0 0 0 50.8,63.8 L63.6,55.3 A1.5,1.5 0 0 0 63.6,52.7 L50.8,44.2 A1.5,1.5 0 0 0 48.5,45.5 Z" />
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.0"
+        android:strokeLineJoin="round"
+        android:pathData="M60.41,45.77 L53.93,71.69 L80.27,56.91 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="1"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M62.52,23.93 L61.43,28.29" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="1"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M47.85,82.62 L46.75,86.98" />
 </vector>
