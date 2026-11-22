@@ -34,6 +34,7 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
     var video: Format? = null
     var hasAudio = false
     var audioMime = ""
+    var audioChannels = 0
     var durationMs = C.TIME_UNSET
 
     // Media3 reads every container the player and the exporter can handle.
@@ -48,7 +49,10 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
                         val mime = format.sampleMimeType
                         if (video == null && MimeTypes.isVideo(mime)) video = format
                         if (MimeTypes.isAudio(mime)) {
-                            if (!hasAudio) audioMime = mime ?: ""
+                            if (!hasAudio) {
+                                audioMime = mime ?: ""
+                                audioChannels = format.channelCount.coerceAtLeast(0)
+                            }
                             hasAudio = true
                         }
                     }
@@ -119,6 +123,7 @@ suspend fun probeVideo(context: Context, uri: Uri): VideoSource? = withContext(D
         hasAudio = hasAudio,
         videoMime = videoMime,
         audioMime = if (hasAudio) audioMime else "",
+        audioChannels = if (hasAudio) audioChannels else 0,
         rotationDegrees = ((rotation % 360) + 360) % 360,
         bitrate = if (sizeBytes > 0) (sizeBytes * 8000 / durationMs).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else 0,
     )

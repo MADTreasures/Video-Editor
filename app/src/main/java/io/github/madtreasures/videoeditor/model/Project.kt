@@ -20,6 +20,8 @@ data class VideoSource(
     val audioMime: String = "",
     /** Rotation the file asks players to apply; [width] and [height] already include it. */
     val rotationDegrees: Int = 0,
+    /** Number of sound channels; 0 if unknown or there is no sound. */
+    val audioChannels: Int = 0,
 ) {
     val aspectRatio: Float get() = if (height > 0) width.toFloat() / height else 16f / 9f
 }

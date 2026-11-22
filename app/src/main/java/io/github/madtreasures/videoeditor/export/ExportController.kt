@@ -356,7 +356,14 @@ object ExportController {
                 }
             }
         }
-        val effects = Effects(emptyList(), videoEffects)
+        // Media3 mixes into the channel layout of the first sound it gets. A mono video would
+        // turn added stereo music into mono, so its sound is spread to both sides first. Only
+        // done when every clip is known to be mono or stereo; other layouts keep their own.
+        val spreadToStereo = project.hasLaneAudio && project.hasAudio &&
+            project.clips.all { it.source.audioChannels in 1..2 } &&
+            project.clips.any { it.source.audioChannels == 1 }
+        val audioProcessors = if (spreadToStereo) listOf(toStereo()) else emptyList()
+        val effects = Effects(audioProcessors, videoEffects)
 
         val items = project.clips.map { clip ->
             val clipping = MediaItem.ClippingConfiguration.Builder()
@@ -424,6 +431,12 @@ object ExportController {
             cursorUs = max(cursorUs, startUs) + lengthUs
         }
         return builder.build()
+    }
+
+    /** Mono to both channels of stereo; stereo stays as it is. */
+    private fun toStereo(): AudioProcessor = ChannelMixingAudioProcessor().apply {
+        putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(1, 2))
+        putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(2, 2))
     }
 
     /** Scales every channel by [gain], for files with up to eight channels. */
